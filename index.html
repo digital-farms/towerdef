@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tower Defense Clean</title>
+  <style>
+    body { margin: 0; background: #000; }
+    canvas { display: block; margin: auto; background: #111; }
+  </style>
+</head>
+<body>
+<canvas id="gameCanvas" width="640" height="480"></canvas>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Images
+const bgImage = new Image();
+bgImage.src = './map.png';
+
+const dinoSprite = new Image();
+dinoSprite.src = './dino_sprite.png';
+
+const baseImg = new Image();
+baseImg.src = './base.png';
+
+const turretImg = new Image();
+turretImg.src = './turret.png';
+
+// Game state
+const towers = [];
+const enemies = [];
+const bullets = [];
+const base = { x: 595, y: 200, hp: 10 };
+
+const path = [
+  { x: 0,   y: 260 },
+  { x: 105, y: 260 },
+  { x: 105, y: 120 },
+  { x: 235, y: 120 },
+  { x: 235, y: 310 },
+  { x: 405, y: 310 },
+  { x: 405, y: 210 },
+  { x: 520, y: 210 }
+];
+
+class Enemy {
+  constructor() {
+    this.x = path[0].x;
+    this.y = path[0].y;
+    this.pathIndex = 0;
+    this.speed = 1;
+    this.hp = 3;
+    this.dead = false;
+
+    // Animation
+    this.frame = 0;
+    this.frameDelay = 5;
+    this.frameCounter = 0;
+    this.frameWidth = 24;
+    this.frameHeight = 24;
+  }
+
+  update() {
+    // Animate
+    this.frameCounter++;
+    if (this.frameCounter >= this.frameDelay) {
+      this.frame = (this.frame + 1) % 6;
+      this.frameCounter = 0;
+    }
+
+    // Move
+    const target = path[this.pathIndex + 1];
+    if (!target) {
+      base.hp--;
+      this.dead = true;
+      return;
+    }
+    const dx = target.x - this.x;
+    const dy = target.y - this.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < this.speed) {
+      this.pathIndex++;
+    } else {
+      this.x += (dx / dist) * this.speed;
+      this.y += (dy / dist) * this.speed;
+    }
+  }
+
+  draw() {
+    console.log('draw dino', this.x, this.y, 'frame:', this.frame, 'id:', this);
+    ctx.drawImage(
+      dinoSprite,
+      this.frame * this.frameWidth, 0,
+      this.frameWidth, this.frameHeight,
+      this.x - 18, this.y - 18,
+      36, 36
+    );
+  }
+}
+
+class Tower {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.range = 100;
+    this.fireRate = 30;
+    this.cooldown = 0;
+  }
+
+  update() {
+    if (this.cooldown > 0) {
+      this.cooldown--;
+      return;
+    }
+    for (const e of enemies) {
+      const dx = e.x - this.x;
+      const dy = e.y - this.y;
+      if (Math.hypot(dx, dy) <= this.range) {
+        bullets.push(new Bullet(this.x, this.y, e));
+        this.cooldown = this.fireRate;
+        break;
+      }
+    }
+  }
+
+  draw() {
+    ctx.drawImage(
+      turretImg,
+      this.x - 24, this.y - 24,
+      48, 48
+    );
+  }
+}
+
+class Bullet {
+  constructor(x, y, target) {
+    this.x = x;
+    this.y = y;
+    this.target = target;
+    this.speed = 4;
+    this.dead = false;
+  }
+
+  update() {
+    const dx = this.target.x - this.x;
+    const dy = this.target.y - this.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < this.speed || this.target.hp <= 0) {
+      this.target.hp--;
+      this.dead = true;
+    } else {
+      this.x += (dx / dist) * this.speed;
+      this.y += (dy / dist) * this.speed;
+    }
+  }
+
+  draw() {
+    ctx.fillStyle = 'yellow';
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawBase() {
+  ctx.drawImage(baseImg, base.x - 64, base.y - 64, 128, 128);
+  ctx.fillStyle = 'white';
+  ctx.font = '14px sans-serif';
+  ctx.fillText('HP: ' + base.hp, base.x - 20, base.y - 70);
+}
+
+function gameLoop() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bgImage, 0, 0);
+
+  // Spawn enemies
+  if (Math.random() < 0.01) enemies.push(new Enemy());
+
+  // Update
+  enemies.forEach(e => e.update());
+  towers.forEach(t => t.update());
+  bullets.forEach(b => b.update());
+
+  // Draw
+  enemies.forEach(e => e.draw());
+  towers.forEach(t => t.draw());
+  bullets.forEach(b => b.draw());
+  drawBase();
+
+  // Remove dead
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    if (enemies[i].hp <= 0 || enemies[i].dead) enemies.splice(i, 1);
+  }
+  for (let i = bullets.length - 1; i >= 0; i--) {
+    if (bullets[i].dead) bullets.splice(i, 1);
+  }
+
+  if (base.hp > 0) {
+    requestAnimationFrame(gameLoop);
+  } else {
+    ctx.fillStyle = 'red';
+    ctx.font = '32px sans-serif';
+    ctx.fillText('Game Over', 240, 240);
+  }
+}
+
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  towers.push(new Tower(x, y));
+});
+
+bgImage.onload = () => {
+  gameLoop();
+};
+</script>
+</body>
+</html>
