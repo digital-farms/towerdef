@@ -10,6 +10,10 @@
 </head>
 <body>
 <canvas id="gameCanvas" width="640" height="480"></canvas>
+<div style="width:640px;margin:10px auto 0 auto;display:flex;justify-content:center;align-items:center;gap:16px;">
+  <button id="spawnPlus" style="font-size:24px;">+</button>
+  <span id="spawnRateDisplay" style="font-size:18px;color:white;font-family:sans-serif;text-shadow:0 0 2px #000;">0.01</span>
+</div>
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -43,6 +47,8 @@ const path = [
   { x: 405, y: 210 },
   { x: 520, y: 210 }
 ];
+
+let enemySpawnRate = 0.01;
 
 class Enemy {
   constructor() {
@@ -175,7 +181,7 @@ function gameLoop() {
   ctx.drawImage(bgImage, 0, 0);
 
   // Spawn enemies
-  if (Math.random() < 0.01) enemies.push(new Enemy());
+  if (Math.random() < enemySpawnRate) enemies.push(new Enemy());
 
   // Update
   enemies.forEach(e => e.update());
@@ -211,6 +217,12 @@ canvas.addEventListener('click', (e) => {
   const y = e.clientY - rect.top;
   towers.push(new Tower(x, y));
 });
+
+document.getElementById('spawnPlus').onclick = () => {
+  enemySpawnRate = Math.min(enemySpawnRate + 0.005, 1);
+  document.getElementById('spawnRateDisplay').textContent = enemySpawnRate.toFixed(3);
+};
+document.getElementById('spawnRateDisplay').textContent = enemySpawnRate.toFixed(3);
 
 bgImage.onload = () => {
   gameLoop();
