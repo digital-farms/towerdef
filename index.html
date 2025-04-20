@@ -9,7 +9,7 @@
   </style>
 </head>
 <body>
-<canvas id="gameCanvas" width="640" height="480"></canvas>
+<canvas id="gameCanvas"></canvas>
 <div style="width:640px;margin:10px auto 0 auto;display:flex;justify-content:center;align-items:center;gap:16px;">
   <button id="spawnPlus" style="font-size:24px;">+</button>
   <span id="spawnRateDisplay" style="font-size:18px;color:white;font-family:sans-serif;text-shadow:0 0 2px #000;">0.01</span>
@@ -176,9 +176,32 @@ function drawBase() {
   ctx.fillText('HP: ' + base.hp, base.x - 20, base.y - 70);
 }
 
+function resizeCanvas() {
+  const aspect = 640 / 480;
+  let w = window.innerWidth;
+  let h = window.innerHeight;
+  if (w / h > aspect) {
+    w = h * aspect;
+  } else {
+    h = w / aspect;
+  }
+  canvas.width = w;
+  canvas.height = h;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
 function gameLoop() {
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0); // reset transform
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(bgImage, 0, 0);
+  // Масштабируем всё содержимое:
+  const scale = Math.min(canvas.width / 640, canvas.height / 480);
+  ctx.scale(scale, scale);
+
+  ctx.drawImage(bgImage, 0, 0, 640, 480);
 
   // Spawn enemies
   if (Math.random() < enemySpawnRate) enemies.push(new Enemy());
@@ -202,19 +225,27 @@ function gameLoop() {
     if (bullets[i].dead) bullets.splice(i, 1);
   }
 
+  ctx.restore();
+
   if (base.hp > 0) {
     requestAnimationFrame(gameLoop);
   } else {
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = 'red';
     ctx.font = '32px sans-serif';
-    ctx.fillText('Game Over', 240, 240);
+    ctx.fillText('Game Over', canvas.width/2-80, canvas.height/2);
+    ctx.restore();
   }
 }
 
 canvas.addEventListener('click', (e) => {
   const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
+  const rawX = e.clientX - rect.left;
+  const rawY = e.clientY - rect.top;
+  const scale = Math.min(canvas.width / 640, canvas.height / 480);
+  const x = rawX / scale;
+  const y = rawY / scale;
   towers.push(new Tower(x, y));
 });
 
