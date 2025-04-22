@@ -49,12 +49,12 @@ const path = [
   { x: 520, y: 210 }
 ];
 
-let enemySpawnRate = 0.01;
+let enemySpawnRate = 0.007;
 
 // --- Зоны для спавна башен зрителей (по картинке) ---
 const ALLOWED_TOWER_ZONES = [
   // [x1, y1, x2, y2] — координаты прямоугольников (всегда в "игровых" координатах 0..640, 0..480)
-  [12, 100, 520, 480],      // Левый верхний
+  [12, 140, 500, 380],      // Левый верхний
   // другие зоны не используются
 ];
 let showTowerZones = false; // Показывать красные зоны (можно убрать потом)
@@ -137,9 +137,11 @@ class Tower {
     this.x = x;
     this.y = y;
     this.range = 100;
-    this.fireRate = 60;
+    this.fireRate = 45;
     this.cooldown = 0;
-    this.killCount = 0; // Счётчик убитых мобов
+    this.killCount = 0;
+    this.shotsLeft = 50; // Лимит выстрелов
+    this.dead = false;   // Флаг удаления
   }
 
   update() {
@@ -147,12 +149,17 @@ class Tower {
       this.cooldown--;
       return;
     }
+    if (this.shotsLeft <= 0) {
+      this.dead = true;
+      return;
+    }
     for (const e of enemies) {
       const dx = e.x - this.x;
       const dy = e.y - this.y;
       if (Math.hypot(dx, dy) <= this.range) {
-        bullets.push(new Bullet(this.x, this.y, e, this)); // Передаём ссылку на башню
+        bullets.push(new Bullet(this.x, this.y, e, this));
         this.cooldown = this.fireRate;
+        this.shotsLeft--;
         break;
       }
     }
@@ -173,6 +180,13 @@ class Tower {
     ctx.textAlign = 'center';
     ctx.strokeText(this.killCount, this.x, this.y - 34);
     ctx.fillText(this.killCount, this.x, this.y - 34);
+    ctx.restore();
+    // Показываем оставшиеся выстрелы мелко под башней
+    ctx.save();
+    ctx.font = '10px Arial';
+    ctx.fillStyle = '#aaa';
+    ctx.textAlign = 'center';
+    ctx.fillText(this.shotsLeft, this.x, this.y + 28);
     ctx.restore();
   }
 }
@@ -204,6 +218,13 @@ class AvatarTower extends Tower {
     ctx.textAlign = 'center';
     ctx.strokeText(this.killCount, this.x, this.y - 30);
     ctx.fillText(this.killCount, this.x, this.y - 30);
+    ctx.restore();
+    // Показываем оставшиеся выстрелы мелко под башней
+    ctx.save();
+    ctx.font = '10px Arial';
+    ctx.fillStyle = '#aaa';
+    ctx.textAlign = 'center';
+    ctx.fillText(this.shotsLeft, this.x, this.y + 28);
     ctx.restore();
   }
 }
@@ -278,6 +299,15 @@ function gameLoop() {
 
   ctx.drawImage(bgImage, 0, 0, 640, 480);
 
+  if (showTowerZones) {
+  for (const [x1, y1, x2, y2] of ALLOWED_TOWER_ZONES) {
+    ctx.strokeStyle = 'red';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+  }
+}
+
+
   // Spawn enemies
   if (Math.random() < enemySpawnRate) enemies.push(new Enemy());
 
@@ -298,6 +328,13 @@ function gameLoop() {
   }
   for (let i = bullets.length - 1; i >= 0; i--) {
     if (bullets[i].dead) bullets.splice(i, 1);
+  }
+  for (let i = towers.length - 1; i >= 0; i--) {
+    if (towers[i].dead) {
+      enemySpawnRate = Math.max(0, enemySpawnRate - 0.0025);
+      updateSpawnRateDisplay();
+      towers.splice(i, 1);
+    }
   }
 
   ctx.restore();
