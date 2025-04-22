@@ -14,6 +14,7 @@
   <button id="spawnPlus" style="font-size:24px;">+</button>
   <span id="spawnRateDisplay" style="font-size:18px;color:white;font-family:sans-serif;text-shadow:0 0 2px #000;">0.01</span>
 </div>
+<span id="spawnRateCorner" style="position:fixed;top:8px;left:8px;font-size:13px;color:#fff;background:rgba(0,0,0,0.5);padding:2px 7px;border-radius:7px;font-family:sans-serif;z-index:10;pointer-events:none;">rate: 0.01</span>
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -35,7 +36,7 @@ turretImg.src = './turret.png';
 const towers = [];
 const enemies = [];
 const bullets = [];
-const base = { x: 595, y: 200, hp: 10 };
+const base = { x: 595, y: 200, hp: 10000 };
 
 const path = [
   { x: 0,   y: 260 },
@@ -49,6 +50,32 @@ const path = [
 ];
 
 let enemySpawnRate = 0.01;
+
+// --- Зоны для спавна башен зрителей (по картинке) ---
+const ALLOWED_TOWER_ZONES = [
+  // [x1, y1, x2, y2] — координаты прямоугольников (всегда в "игровых" координатах 0..640, 0..480)
+  [12, 100, 520, 480],      // Левый верхний
+  // другие зоны не используются
+];
+let showTowerZones = false; // Показывать красные зоны (можно убрать потом)
+
+function randomTowerPositionInAllowedZones() {
+  const zone = ALLOWED_TOWER_ZONES[0];
+  let [x1, y1, x2, y2] = zone;
+  const w = x2 - x1;
+  const h = y2 - y1;
+  const radius = 16;
+  if (w < radius * 2 || h < radius * 2) {
+    const pos = { x: x1 + w / 2, y: y1 + h / 2 };
+    console.warn('[TOWER_SPAWN_DEBUG] маленькая зона', pos, 'zone:', [x1, y1, x2, y2]);
+    return pos;
+  }
+  const x = x1 + radius + Math.random() * (w - radius * 2);
+  const y = y1 + radius + Math.random() * (h - radius * 2);
+  const pos = { x, y };
+  console.warn('[TOWER_SPAWN_DEBUG] выпало', pos, 'zone:', [x1, y1, x2, y2]);
+  return pos;
+}
 
 class Enemy {
   constructor() {
@@ -110,8 +137,9 @@ class Tower {
     this.x = x;
     this.y = y;
     this.range = 100;
-    this.fireRate = 30;
+    this.fireRate = 60;
     this.cooldown = 0;
+    this.killCount = 0; // Счётчик убитых мобов
   }
 
   update() {
@@ -123,7 +151,7 @@ class Tower {
       const dx = e.x - this.x;
       const dy = e.y - this.y;
       if (Math.hypot(dx, dy) <= this.range) {
-        bullets.push(new Bullet(this.x, this.y, e));
+        bullets.push(new Bullet(this.x, this.y, e, this)); // Передаём ссылку на башню
         this.cooldown = this.fireRate;
         break;
       }
@@ -133,17 +161,59 @@ class Tower {
   draw() {
     ctx.drawImage(
       turretImg,
-      this.x - 24, this.y - 24,
-      48, 48
+      this.x - 26, this.y - 26,
+      52, 52
     );
+    // Рисуем killCount над башней
+    ctx.save();
+    ctx.font = 'bold 16px Arial';
+    ctx.fillStyle = 'white';
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 2;
+    ctx.textAlign = 'center';
+    ctx.strokeText(this.killCount, this.x, this.y - 34);
+    ctx.fillText(this.killCount, this.x, this.y - 34);
+    ctx.restore();
+  }
+}
+
+class AvatarTower extends Tower {
+  constructor(x, y, avatarImg) {
+    super(x, y);
+    this.avatarImg = avatarImg;
+    console.warn('[AVATAR_CONSTRUCTOR_DEBUG]', x, y);
+  }
+  draw() {
+    if (this.avatarImg && this.avatarImg.complete) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, 26, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(this.avatarImg, this.x - 26, this.y - 26, 52, 52);
+      ctx.restore();
+    } else {
+      super.draw();
+      return;
+    }
+    // Рисуем killCount над башней
+    ctx.save();
+    ctx.font = 'bold 15px Arial';
+    ctx.fillStyle = 'white';
+    ctx.strokeStyle = 'black';
+    ctx.lineWidth = 2;
+    ctx.textAlign = 'center';
+    ctx.strokeText(this.killCount, this.x, this.y - 30);
+    ctx.fillText(this.killCount, this.x, this.y - 30);
+    ctx.restore();
   }
 }
 
 class Bullet {
-  constructor(x, y, target) {
+  constructor(x, y, target, ownerTower = null) {
     this.x = x;
     this.y = y;
     this.target = target;
+    this.ownerTower = ownerTower; // Ссылка на башню
     this.speed = 4;
     this.dead = false;
   }
@@ -153,7 +223,12 @@ class Bullet {
     const dy = this.target.y - this.y;
     const dist = Math.hypot(dx, dy);
     if (dist < this.speed || this.target.hp <= 0) {
-      this.target.hp--;
+      if (this.target.hp > 0) {
+        this.target.hp--;
+        if (this.target.hp <= 0 && this.ownerTower) {
+          this.ownerTower.killCount++;
+        }
+      }
       this.dead = true;
     } else {
       this.x += (dx / dist) * this.speed;
@@ -239,6 +314,11 @@ function gameLoop() {
   }
 }
 
+function updateSpawnRateDisplay() {
+  document.getElementById('spawnRateDisplay').textContent = enemySpawnRate.toFixed(3);
+  document.getElementById('spawnRateCorner').textContent = `rate: ${enemySpawnRate.toFixed(3)}`;
+}
+
 canvas.addEventListener('click', (e) => {
   const rect = canvas.getBoundingClientRect();
   const rawX = e.clientX - rect.left;
@@ -247,13 +327,59 @@ canvas.addEventListener('click', (e) => {
   const x = rawX / scale;
   const y = rawY / scale;
   towers.push(new Tower(x, y));
+  enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
+  updateSpawnRateDisplay();
 });
 
 document.getElementById('spawnPlus').onclick = () => {
   enemySpawnRate = Math.min(enemySpawnRate + 0.005, 1);
-  document.getElementById('spawnRateDisplay').textContent = enemySpawnRate.toFixed(3);
+  updateSpawnRateDisplay();
 };
-document.getElementById('spawnRateDisplay').textContent = enemySpawnRate.toFixed(3);
+updateSpawnRateDisplay();
+
+const tiktokSocket = new WebSocket('ws://localhost:8080');
+tiktokSocket.addEventListener('open', () => {
+  console.log('[TikTok WS] Соединение установлено');
+});
+tiktokSocket.addEventListener('error', (err) => {
+  console.log('[TikTok WS] Ошибка соединения', err);
+});
+let origTikTokMsgHandler = tiktokSocket.onmessage;
+tiktokSocket.onmessage = function(event) {
+  try {
+    const data = JSON.parse(event.data);
+    if (data.type === 'newTower') {
+      const pos = randomTowerPositionInAllowedZones();
+      if (data.avatar) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = data.avatar;
+        img.onload = () => {
+          console.warn('[AVATAR_PUSH_DEBUG] Перед push AvatarTower', pos);
+          towers.push(new AvatarTower(pos.x, pos.y, img));
+          console.warn('[TOWER_SPAWNED] Аватарка', data.nickname, pos, 'canvas:', canvas.width, canvas.height);
+          enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
+          updateSpawnRateDisplay();
+        };
+        img.onerror = () => {
+          towers.push(new Tower(pos.x, pos.y));
+          console.warn('[TOWER_SPAWNED] Без аватарки (ошибка загрузки)', data.nickname, pos, 'canvas:', canvas.width, canvas.height);
+          enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
+          updateSpawnRateDisplay();
+        };
+      } else {
+        towers.push(new Tower(pos.x, pos.y));
+        console.warn('[TOWER_SPAWNED] Без аватарки', data.nickname, pos, 'canvas:', canvas.width, canvas.height);
+        enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
+        updateSpawnRateDisplay();
+      }
+    } else if (origTikTokMsgHandler) {
+      origTikTokMsgHandler.call(tiktokSocket, event);
+    }
+  } catch (e) {
+    console.log('[TikTok WS] Ошибка обработки сообщения:', e);
+  }
+};
 
 bgImage.onload = () => {
   gameLoop();
