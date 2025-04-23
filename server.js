@@ -13,6 +13,7 @@ const tiktokConnection = new WebcastPushConnection(tiktokUsername);
 
 const likeCounts = {};
 const sentTowersCount = {};
+let leaderboardData = [];
 
 // Раздаём всю папку towerdef как статику
 app.use(express.static(__dirname));
@@ -22,9 +23,24 @@ app.get('/', (req, res) => {
   res.sendFile(__dirname + '/index.html');
 });
 
+// --- LEADERBOARD API ---
+app.get('/api/leaderboard', (req, res) => {
+  res.json(leaderboardData.slice(0, 3));
+});
+
 // Логирование всех подключений
 wss.on('connection', (ws) => {
   console.log('[WS] Новый клиент подключен');
+
+  // --- WS для получения leaderboard от клиента ---
+  ws.on('message', (msg) => {
+    try {
+      const data = JSON.parse(msg);
+      if (data.type === 'leaderboardUpdate' && Array.isArray(data.entries)) {
+        leaderboardData = data.entries;
+      }
+    } catch (e) {}
+  });
 });
 
 // Логирование событий TikTok
@@ -52,24 +68,25 @@ tiktokConnection.on('like', (data) => {
     newCount = 1 + Math.floor((likeCounts[userId] - 5) / 100);
   }
   // Если надо выдать новые башни
-  while (prevCount < newCount) {
-    const payload = {
-      userId,
-      avatar: data.profilePictureUrl || null,
-      nickname: data.uniqueId || '',
-      likeCount: likeCounts[userId],
-      time: new Date().toISOString(),
-      bonus: prevCount > 0 // true для второй и последующих башен
-    };
-    const msg = JSON.stringify({ type: 'newTower', ...payload });
-    wss.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(msg);
-      }
-    });
-    logTikTok(`Башня #${prevCount + 1} для ${payload.nickname} (${userId}) отправлена в игру!`);
-    sentTowersCount[userId] = prevCount + 1;
-    prevCount++;
+  if (newCount > prevCount) {
+    for (let i = prevCount; i < newCount; i++) {
+      const payload = {
+        userId,
+        avatar: data.profilePictureUrl || null,
+        nickname: data.uniqueId || data.nickname || '',
+        likeCount: likeCounts[userId],
+        time: new Date().toISOString(),
+        bonus: i > 0 // true для второй и последующих башен
+      };
+      const msg = JSON.stringify({ type: 'newTower', ...payload });
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(msg);
+        }
+      });
+      logTikTok(`Башня #${i + 1} для ${payload.nickname} (${userId}) отправлена в игру!`);
+      sentTowersCount[userId] = i + 1;
+    }
   }
 });
 

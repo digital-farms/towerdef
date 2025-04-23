@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+<title>BEST TOWER DEFENDER</title>
+  <style>
+    body { background: #111; color: #fff; font-family: Arial, sans-serif; }
+    .leaderboard {
+      background: #2687c6; /* голубой фон */
+      border: 7px solid #0f4772; /* темно-синяя обводка */
+      box-shadow: 0 0 0 3px black; /* внешняя черная обводка */
+      border-radius: 12px;
+      padding: 16px 24px;
+      font-family: 'Arial Black', sans-serif;
+      font-size: 18px;
+      color: #f47e20; /* оранжевый текст */
+      text-shadow: 2px 4px 0 #7a3000; /* темно-оранжевая тень */
+      width: fit-content;
+      margin: 40px auto;
+      min-width: 340px;
+    }
+    .lb-title {
+      text-align: center;
+      font-size: 1.3em;
+      font-weight: bold;
+      margin-bottom: 14px;
+      letter-spacing: 1px;
+    }
+    .lb-row {
+      display: flex;
+      align-items: center;
+      font-size: 1em;
+      font-family: 'Arial Black', Arial, sans-serif;
+      margin-bottom: 10px;
+    }
+    .lb-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      margin-right: 10px;
+      object-fit: cover;
+      background: #333;
+      border: 2px solid #fff;
+    }
+    .lb-score {
+      margin-left: auto;
+      font-size: 1em;
+      color: #7a3000;
+      font-family: 'Arial Black', Arial, sans-serif;
+      text-shadow: 2px 4px 0 #f47e20;
+    }
+  </style>
+</head>
+<body>
+  <div class="leaderboard">
+    <div class="lb-title">BEST TOWER DEFENDERS</div>
+    <div id="entries"></div>
+  </div>
+  <script>
+    async function fetchLeaderboard() {
+      const res = await fetch('/api/leaderboard');
+      return res.json();
+    }
+    function renderLeaderboard(entries) {
+      const entriesDiv = document.getElementById('entries');
+      entriesDiv.innerHTML = '';
+      // Гарантируем 3 строки (может быть меньше участников)
+      for (let i = 0; i < 3; i++) {
+        const entry = entries[i];
+        if (entry) {
+          entriesDiv.innerHTML += `
+            <div class="lb-row">
+              <img class="lb-avatar" src="${entry.avatarImg || ''}" alt="" />
+              <span>${entry.username}</span>
+              <span class="lb-score">${entry.score}</span>
+            </div>
+          `;
+        } else {
+          entriesDiv.innerHTML += `<div class="lb-row" style="opacity:.7;text-align:center;">Пусто</div>`;
+        }
+      }
+    }
+    async function update() {
+      const leaderboard = await fetchLeaderboard();
+      renderLeaderboard(leaderboard);
+    }
+    update();
+    setInterval(update, 2000);
+  </script>
+</body>
+</html>
