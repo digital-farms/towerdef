@@ -62,10 +62,4 @@
 
 ---
 
-## Контакты
-- Issues, баги, фичи — через GitHub Issues
-- Вопросы — [t.me/digitaln0mad](https://t.me/digitaln0mad)
-
----
-
 **Удачи и весёлых башен!**
