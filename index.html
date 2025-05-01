@@ -15,6 +15,7 @@
   <span id="spawnRateDisplay" style="font-size:18px;color:white;font-family:sans-serif;text-shadow:0 0 2px #000;">0.01</span>
 </div>
 <span id="spawnRateCorner" style="position:fixed;top:8px;left:8px;font-size:13px;color:#fff;background:rgba(0,0,0,0.5);padding:2px 7px;border-radius:7px;font-family:sans-serif;z-index:10;pointer-events:none;">rate: 0.01</span>
+<audio id="spawnTowerSound" src="sound/spawnTower.mp3" preload="auto"></audio>
 <script src="leaderboard.js"></script>
 <script>
 const canvas = document.getElementById('gameCanvas');
@@ -33,11 +34,14 @@ baseImg.src = './base.png';
 const turretImg = new Image();
 turretImg.src = './turret.png';
 
+const golemSprite = new Image();
+golemSprite.src = './Golem_1_walk.png';
+
 // Game state
 const towers = [];
 const enemies = [];
 const bullets = [];
-const base = { x: 595, y: 200, hp: 10000 };
+const base = { x: 540, y: 80, hp: 10000 };
 
 const path = [
   { x: 0,   y: 260 },
@@ -91,15 +95,15 @@ class Enemy {
     this.frame = 0;
     this.frameDelay = 5;
     this.frameCounter = 0;
-    this.frameWidth = 24;
-    this.frameHeight = 24;
+    this.frameWidth = 80;
+    this.frameHeight = 80;
   }
 
   update() {
     // Animate
     this.frameCounter++;
     if (this.frameCounter >= this.frameDelay) {
-      this.frame = (this.frame + 1) % 6;
+      this.frame = (this.frame + 1) % 8;
       this.frameCounter = 0;
     }
 
@@ -122,13 +126,14 @@ class Enemy {
   }
 
   draw() {
-    console.log('draw dino', this.x, this.y, 'frame:', this.frame, 'id:', this);
+    // Для всех мобов: якорь по центру НИЗА (ноги идут по линии пути)
+    // Спрайт 60x60: смещаем по x на -30, по y на -60 (нижний центр)
     ctx.drawImage(
       dinoSprite,
       this.frame * this.frameWidth, 0,
       this.frameWidth, this.frameHeight,
-      this.x - 18, this.y - 18,
-      36, 36
+      this.x - 30, this.y - 60, // x - w/2, y - h (центр по низу)
+      60, 60
     );
   }
 }
@@ -203,8 +208,12 @@ class AvatarTower extends Tower {
   draw() {
     if (this.avatarImg && this.avatarImg.complete) {
       ctx.save();
+      // Обводка — круг
       ctx.beginPath();
-      ctx.arc(this.x, this.y, 26, 0, Math.PI * 2);
+      ctx.arc(this.x, this.y, 28, 0, Math.PI * 2);
+      ctx.lineWidth = 9;
+      ctx.strokeStyle = '#222';
+      ctx.stroke();
       ctx.clip();
       ctx.drawImage(this.avatarImg, this.x - 26, this.y - 26, 52, 52);
       ctx.restore();
@@ -253,6 +262,9 @@ class Bullet {
           this.ownerTower.killCount++;
           updateLeaderboardFromTowers();
         }
+        if (this.target.hp <= 0) {
+          this.target.dead = true; // фикс: враг удаляется с поля
+        }
       }
       this.dead = true;
     } else {
@@ -269,11 +281,149 @@ class Bullet {
   }
 }
 
+class GolemBullet {
+  constructor(x, y, target) {
+    this.x = x;
+    this.y = y;
+    this.target = target;
+    this.speed = 5;
+    this.dead = false;
+  }
+  update() {
+    if (!this.target || this.target.dead) {
+      this.dead = true;
+      return;
+    }
+    const dx = this.target.x - this.x;
+    const dy = this.target.y - this.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < this.speed) {
+      // Попадание
+      if (this.target.killCount !== undefined) {
+        this.target.killCount = Math.max(0, this.target.killCount - 3);
+      }
+      this.dead = true;
+      return;
+    }
+    this.x += (dx / dist) * this.speed;
+    this.y += (dy / dist) * this.speed;
+  }
+  draw() {
+    ctx.save();
+    ctx.fillStyle = 'red';
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+class GolemEnemy extends Enemy {
+  constructor() {
+    super();
+    this.hp = 20;
+    this.maxHp = 20;
+    this.speed = 0.4;
+    this.bulletCooldown = 0;
+    this.fireRate = 90; // раз в 1.5 сек
+    this.frame = 0;
+    this.frameDelay = 6;
+    this.frameCounter = 0;
+    this.frameWidth = 90;
+    this.frameHeight = 52; // было 40, теперь +12
+    this.sizeOffsetY = 26; // для центровки
+    this.visualScale = 1.4; // Увеличиваем голема на 40%
+  }
+
+  update() {
+    // смерть при 0 HP
+    if (this.hp <= 0) {
+      this.dead = true;
+      return;
+    }
+    const target = path[this.pathIndex + 1];
+    if (!target) {
+      this.onReachBase();
+      return;
+    }
+    const dx = target.x - this.x;
+    const dy = target.y - this.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < this.speed) {
+      this.pathIndex++;
+    } else {
+      this.x += (dx / dist) * this.speed;
+      this.y += (dy / dist) * this.speed;
+    }
+    // Стрельба по башням (шариками)
+    if (this.bulletCooldown > 0) this.bulletCooldown--;
+    else {
+      const t = this.findNearestTower();
+      if (t) {
+        this.shootAt(t);
+        this.bulletCooldown = this.fireRate;
+      }
+    }
+    this.frameCounter++;
+    if (this.frameCounter >= this.frameDelay) {
+      this.frame = (this.frame + 1) % 10;
+      this.frameCounter = 0;
+    }
+  }
+
+  findNearestTower() {
+    let minDist = 9999, nearest = null;
+    for (const t of towers) {
+      if (t.dead) continue;
+      const dx = t.x - this.x, dy = t.y - this.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = t;
+      }
+    }
+    return nearest;
+  }
+
+  shootAt(tower) {
+    bullets.push(new GolemBullet(this.x, this.y, tower));
+  }
+
+  onReachBase() {
+    base.hp -= 50;
+    this.dead = true;
+  }
+
+  draw() {
+    const scale = this.visualScale;
+    ctx.drawImage(
+      golemSprite,
+      this.frame * this.frameWidth, 0,
+      this.frameWidth, this.frameHeight,
+      this.x - 45 * scale, this.y - this.sizeOffsetY * scale,
+      this.frameWidth * scale, this.frameHeight * scale
+    );
+    // HP bar
+    ctx.fillStyle = '#222';
+    ctx.fillRect(this.x - 20 * scale, this.y - this.sizeOffsetY * scale - 8, 40 * scale, 8);
+    ctx.fillStyle = '#0f0';
+    ctx.fillRect(this.x - 20 * scale, this.y - this.sizeOffsetY * scale - 8, 40 * scale * (this.hp / this.maxHp), 8);
+    ctx.strokeStyle = '#000';
+    ctx.strokeRect(this.x - 20 * scale, this.y - this.sizeOffsetY * scale - 8, 40 * scale, 8);
+  }
+}
+
 function drawBase() {
-  ctx.drawImage(baseImg, base.x - 64, base.y - 64, 128, 128);
+  ctx.drawImage(baseImg, base.x - 64, base.y - 64, 256, 256);
+  ctx.save();
+  ctx.font = 'bold 20px Arial';
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = 'black';
   ctx.fillStyle = 'white';
-  ctx.font = '14px sans-serif';
-  ctx.fillText('HP: ' + base.hp, base.x - 20, base.y - 70);
+  ctx.textAlign = 'center';
+  ctx.strokeText('HP: ' + base.hp, base.x, base.y + 50);
+  ctx.fillText('HP: ' + base.hp, base.x, base.y + 50);
+  ctx.restore();
 }
 
 function resizeCanvas() {
@@ -304,30 +454,36 @@ function gameLoop() {
   ctx.drawImage(bgImage, 0, 0, 640, 480);
 
   if (showTowerZones) {
-  for (const [x1, y1, x2, y2] of ALLOWED_TOWER_ZONES) {
-    ctx.strokeStyle = 'red';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    for (const [x1, y1, x2, y2] of ALLOWED_TOWER_ZONES) {
+      ctx.strokeStyle = 'red';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    }
   }
-}
 
-  // Spawn enemies
+  // --- SPAWN GOLEM IF NEEDED ---
+  checkGolemSpawn();
+
+  // Spawn обычных врагов
   if (Math.random() < enemySpawnRate) enemies.push(new Enemy());
 
   // Update
-  enemies.forEach(e => e.update());
-  towers.forEach(t => t.update());
-  bullets.forEach(b => b.update());
+  for (const t of towers) t.update();
+  for (const e of enemies) e.update();
+  for (const b of bullets) b.update();
 
   // Draw
-  enemies.forEach(e => e.draw());
-  towers.forEach(t => t.draw());
-  bullets.forEach(b => b.draw());
   drawBase();
+  for (const t of towers) t.draw();
+  // Сначала рисуем обычных мобов
+  for (const e of enemies) if (!(e instanceof GolemEnemy)) e.draw();
+  // Потом рисуем всех големов поверх
+  for (const e of enemies) if (e instanceof GolemEnemy) e.draw();
+  for (const b of bullets) b.draw();
 
   // Remove dead
   for (let i = enemies.length - 1; i >= 0; i--) {
-    if (enemies[i].hp <= 0 || enemies[i].dead) enemies.splice(i, 1);
+    if (enemies[i].dead) enemies.splice(i, 1);
   }
   for (let i = bullets.length - 1; i >= 0; i--) {
     if (bullets[i].dead) bullets.splice(i, 1);
@@ -347,10 +503,20 @@ function gameLoop() {
   } else {
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.font = 'bold 48px Arial';
+    ctx.lineWidth = 7;
+    ctx.strokeStyle = 'black';
     ctx.fillStyle = 'red';
-    ctx.font = '32px sans-serif';
-    ctx.fillText('Game Over', canvas.width/2-80, canvas.height/2);
+    ctx.textAlign = 'center';
+    ctx.strokeText('Game Over', canvas.width/2, canvas.height/2);
+    ctx.fillText('Game Over', canvas.width/2, canvas.height/2);
     ctx.restore();
+  }
+}
+
+function checkGolemSpawn() {
+  if (towers.length >= 5 && !enemies.some(e => e instanceof GolemEnemy)) {
+    enemies.push(new GolemEnemy());
   }
 }
 
@@ -376,6 +542,14 @@ function updateLeaderboardFromTowers() {
   }
 }
 
+function playSpawnTowerSound() {
+  const audio = document.getElementById('spawnTowerSound');
+  if (audio) {
+    audio.currentTime = 0;
+    audio.play();
+  }
+}
+
 canvas.addEventListener('click', (e) => {
   const rect = canvas.getBoundingClientRect();
   const rawX = e.clientX - rect.left;
@@ -384,6 +558,7 @@ canvas.addEventListener('click', (e) => {
   const x = rawX / scale;
   const y = rawY / scale;
   towers.push(new Tower(x, y));
+  playSpawnTowerSound();
   enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
   updateSpawnRateDisplay();
 });
@@ -413,16 +588,19 @@ tiktokSocket.onmessage = function(event) {
         img.src = data.avatar;
         img.onload = () => {
           towers.push(new AvatarTower(pos.x, pos.y, img, data.nickname, data.userId));
+          playSpawnTowerSound();
           enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
           updateSpawnRateDisplay();
         };
         img.onerror = () => {
           towers.push(new Tower(pos.x, pos.y));
+          playSpawnTowerSound();
           enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
           updateSpawnRateDisplay();
         };
       } else {
         towers.push(new Tower(pos.x, pos.y));
+        playSpawnTowerSound();
         enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
         updateSpawnRateDisplay();
       }
