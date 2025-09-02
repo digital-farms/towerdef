@@ -604,13 +604,20 @@ tiktokSocket.onmessage = function(event) {
         enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
         updateSpawnRateDisplay();
       }
-    } else if (origTikTokMsgHandler) {
-      origTikTokMsgHandler.call(tiktokSocket, event);
+    } else if (data.type === 'extLog') {
+        // Выводим логи внешнего WS в консоль браузера
+        if (data.level === 'raw') {
+          console.log('[EXT][RAW]', data.message);
+        } else {
+          console.log('[EXT][EVENT]', data.eventType, data.payload);
+        }
+      } else if (origTikTokMsgHandler) {
+        origTikTokMsgHandler.call(tiktokSocket, event);
+      }
+    } catch (e) {
+      console.log('[TikTok WS] Ошибка обработки сообщения:', e);
     }
-  } catch (e) {
-    console.log('[TikTok WS] Ошибка обработки сообщения:', e);
-  }
-};
+  };
 
 bgImage.onload = () => {
   gameLoop();
