@@ -19,7 +19,7 @@ let leaderboardData = [];
 //   TT_TOKEN       — Bearer-токен авторизации
 //   LIKES_MODE     — 'delta' (likes — приращение) или 'cumulative' (likes — суммарно)
 const STREAM_HOST = process.env.TT_SERVER_HOST || 'tiktokliveserver.org';
-const STREAMER = process.env.TT_STREAMER || 'enfor.cross';
+const STREAMER = process.env.TT_STREAMER || 'nittaya_asmr';
 const TOKEN = process.env.TT_TOKEN || '3debd82ada04ab756d750d3c7d8295e4ad958e440ba7fd7135e31bba370c1a8d777862c62b3e45fe570640e5c54de641b7c89a7c82732a9489fd156c50f6cec8';
 const LIKES_MODE = (process.env.LIKES_MODE || 'delta').toLowerCase();
 
@@ -110,10 +110,31 @@ function connectExternalWS() {
           });
         } catch {}
       }
+      // Обработка подарков: gift_price === 1 -> ставим башню 1 уровня
+      if (evt && evt.event_type === 'GIFT' && evt.payload && evt.payload.user) {
+        const viewer = String(evt.payload.user);
+        const giftPrice = Number(evt.payload.gift_price || 0);
+        const avatarUrl = evt.payload && evt.payload.avatar ? String(evt.payload.avatar) : null;
+        if (giftPrice === 1) {
+          const giftMsg = JSON.stringify({
+            type: 'newGiftTower',
+            userId: viewer,
+            nickname: viewer,
+            avatar: avatarUrl,
+            level: 1,
+            time: new Date().toISOString()
+          });
+          wss.clients.forEach((client) => {
+            if (client.readyState === WebSocket.OPEN) client.send(giftMsg);
+          });
+          logSrc(`Выдана gift-башня L1 для ${viewer}`);
+        }
+      }
       // Ожидаемый формат: { unique_id: 'streamer', event_type: 'LIKE', payload: { user: 'viewer', likes: 7 } }
       if (evt && evt.event_type === 'LIKE' && evt.payload && evt.payload.user) {
         const viewer = String(evt.payload.user);
         const likesVal = Number(evt.payload.likes || 0);
+        const avatarUrl = evt.payload && evt.payload.avatar ? String(evt.payload.avatar) : null;
 
         if (LIKES_MODE === 'cumulative') {
           // Значение — суммарные лайки пользователя
@@ -137,11 +158,11 @@ function connectExternalWS() {
           for (let i = prevCount; i < newCount; i++) {
             const payload = {
               userId: viewer,
-              avatar: null, // внешний сервер не даёт аватар — можно дополнить позже
+              avatar: avatarUrl,
               nickname: viewer,
-              likeCount: totalLikes,
+              likeCount: likeCounts[viewer],
               time: new Date().toISOString(),
-              bonus: i > 0,
+              bonus: i > 0
             };
             const msg = JSON.stringify({ type: 'newTower', ...payload });
             wss.clients.forEach((client) => {
