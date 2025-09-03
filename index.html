@@ -40,6 +40,9 @@ golemSprite.src = './Golem_1_walk.png';
 // Спрайт башни за подарок 1 уровня
 const giftL1Img = new Image();
 giftL1Img.src = 'gift_towers_assets/1lvl_gift_tower.png';
+// Спрайт башни за подарок 2 уровня
+const giftL2Img = new Image();
+giftL2Img.src = 'gift_towers_assets/2lvl_gift_tower.png';
 
 // Game state
 const towers = [];
@@ -67,6 +70,40 @@ const ALLOWED_TOWER_ZONES = [
   // другие зоны не используются
 ];
 let showTowerZones = false; // Показывать красные зоны (можно убрать потом)
+
+// Характеристики подарочных башен по уровням (боевые и визуальные)
+const GIFT_TOWER_LEVELS = {
+  1: {
+    // Боевые
+    shotsLeft: 150,
+    fireRate: 45,
+    range: 100,
+    // Визуальные
+    tw: 45,              // ширина спрайта на сцене
+    th: 65,              // высота спрайта на сцене
+    baseYOffset: 24,     // сдвиг башни по Y (основание)
+    killTextYOffset: 20, // сдвиг текста киллов относительно верха спрайта
+    avatarYOffset: 32,   // сдвиг центра аватарки относительно верха спрайта
+    avatarRadius: 15,    // радиус круга аватарки
+    avatarStroke: 6,     // толщина обводки круга
+    avatarStrokeColor: '#0000ff' // цвет обводки круга
+  },
+  2: {
+    // Боевые
+    shotsLeft: 250,
+    fireRate: 30,
+    range: 120,
+    // Визуальные (пока такие же как у L1 — можно менять отдельно)
+    tw: 45,
+    th: 65,
+    baseYOffset: 30,
+    killTextYOffset: 20,
+    avatarYOffset: 32,
+    avatarRadius: 15,
+    avatarStroke: 6,
+    avatarStrokeColor: '#FF0000' // цвет обводки круга для L2 (золото)
+  }
+};
 
 function randomTowerPositionInAllowedZones() {
   const zone = ALLOWED_TOWER_ZONES[0];
@@ -247,34 +284,51 @@ class AvatarTower extends Tower {
 
 // Подарочная башня 1 уровня с аватаркой поверх
 class GiftAvatarTower extends Tower {
-  constructor(x, y, avatarImg = null, nickname = null, userId = null) {
+  constructor(x, y, avatarImg = null, nickname = null, userId = null, level = 1) {
     super(x, y);
     this.avatarImg = avatarImg;
     this.nickname = nickname || userId || 'anon';
     this.userId = userId || null;
-    // Характеристики для башни подарка 1 уровня
-    this.level = 1;
-    this.shotsLeft = 150;
+    // Характеристики по уровню
+    this.level = Number(level) || 1;
+    const cfg = GIFT_TOWER_LEVELS[this.level] || GIFT_TOWER_LEVELS[1];
+    this.shotsLeft = cfg.shotsLeft;
+    this.fireRate  = cfg.fireRate;
+    this.range     = cfg.range;
   }
   draw() {
-    // Рисуем спрайт башни подарка
-    const tw = 45, th = 65; // ширина/высота спрайта на сцене
-    ctx.drawImage(giftL1Img, this.x - tw/2, this.y - th + 24, tw, th);
+    // Конфиг уровня (визуальные параметры)
+    const cfg = GIFT_TOWER_LEVELS[this.level] || GIFT_TOWER_LEVELS[1];
+    const tw = cfg.tw, th = cfg.th;
+    const baseYOffset = cfg.baseYOffset;
+    const towerImg = (this.level === 2) ? giftL2Img : giftL1Img;
+    if (towerImg && towerImg.complete) {
+      ctx.drawImage(towerImg, this.x - tw/2, this.y - th + baseYOffset, tw, th);
+    } else {
+      // Плейсхолдер пока не загрузился спрайт, чтобы было видно башню
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,255,0.6)';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.fillRect(this.x - tw/2, this.y - th + baseYOffset, tw, th);
+      ctx.strokeRect(this.x - tw/2, this.y - th + baseYOffset, tw, th);
+      ctx.restore();
+    }
 
     // Далее рисуем аватарку в кружке над башней, если есть
     // ВАЖНО: аватар рисуем до текста killCount, чтобы текст был поверх
     // Рисуем аватарку в кружке над башней, если есть
     if (this.avatarImg && this.avatarImg.complete) {
       const ax = this.x;
-      const ay = this.y - th + 32; // чуть выше крыши башни
-      const R = 15; // как в текущих настройках
+      const ay = this.y - th + cfg.avatarYOffset; // позиция центра аватарки
+      const R = cfg.avatarRadius;
       const P = 1;  // отступ от обводки
       const IW = 2 * (R - P);
       ctx.save();
       ctx.beginPath();
       ctx.arc(ax, ay, R, 0, Math.PI * 2);
-      ctx.lineWidth = 6;
-      ctx.strokeStyle = '#0000ff';
+      ctx.lineWidth = cfg.avatarStroke;
+      ctx.strokeStyle = cfg.avatarStrokeColor || '#0000ff';
       ctx.stroke();
       ctx.clip();
       ctx.drawImage(this.avatarImg, ax - IW/2, ay - IW/2, IW, IW);
@@ -288,8 +342,9 @@ class GiftAvatarTower extends Tower {
     ctx.strokeStyle = 'black';
     ctx.fillStyle = 'white';
     ctx.textAlign = 'center';
-    ctx.strokeText(this.killCount || 0, this.x, this.y - th + 20);
-    ctx.fillText(this.killCount || 0, this.x, this.y - th + 20);
+    const killY = this.y - th + cfg.killTextYOffset;
+    ctx.strokeText(this.killCount || 0, this.x, killY);
+    ctx.fillText(this.killCount || 0, this.x, killY);
     ctx.restore();
 
     // Показываем оставшиеся выстрелы мелко под башней
@@ -667,24 +722,29 @@ tiktokSocket.onmessage = function(event) {
       }
     } else if (data.type === 'newGiftTower') {
       const pos = randomTowerPositionInAllowedZones();
+      const lvl = Number(data.level || 1);
+      console.log('[WS] newGiftTower', {pos, lvl, hasAvatar: !!data.avatar, nickname: data.nickname, userId: data.userId});
       if (data.avatar) {
         const img = new Image();
         img.crossOrigin = 'anonymous';
         img.src = data.avatar;
         img.onload = () => {
-          towers.push(new GiftAvatarTower(pos.x, pos.y, img, data.nickname, data.userId));
+          console.log('[WS] avatar loaded for gift tower');
+          towers.push(new GiftAvatarTower(pos.x, pos.y, img, data.nickname, data.userId, lvl));
           playSpawnTowerSound();
           enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
           updateSpawnRateDisplay();
         };
         img.onerror = () => {
-          towers.push(new GiftAvatarTower(pos.x, pos.y, null, data.nickname, data.userId));
+          console.warn('[WS] avatar failed to load, spawning without avatar');
+          towers.push(new GiftAvatarTower(pos.x, pos.y, null, data.nickname, data.userId, lvl));
           playSpawnTowerSound();
           enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
           updateSpawnRateDisplay();
         };
       } else {
-        towers.push(new GiftAvatarTower(pos.x, pos.y, null, data.nickname, data.userId));
+        console.log('[WS] spawning gift tower without avatar');
+        towers.push(new GiftAvatarTower(pos.x, pos.y, null, data.nickname, data.userId, lvl));
         playSpawnTowerSound();
         enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
         updateSpawnRateDisplay();
