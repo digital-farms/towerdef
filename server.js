@@ -19,8 +19,8 @@ let leaderboardData = [];
 //   TT_TOKEN       — Bearer-токен авторизации
 //   LIKES_MODE     — 'delta' (likes — приращение) или 'cumulative' (likes — суммарно)
 const STREAM_HOST = process.env.TT_SERVER_HOST || 'tiktokliveserver.org';
-const STREAMER = process.env.TT_STREAMER || 'nittaya_asmr';
-const TOKEN = process.env.TT_TOKEN || '3debd82ada04ab756d750d3c7d8295e4ad958e440ba7fd7135e31bba370c1a8d777862c62b3e45fe570640e5c54de641b7c89a7c82732a9489fd156c50f6cec8';
+const STREAMER = process.env.TT_STREAMER || 'sofia_asmrtist';
+const TOKEN = process.env.TT_TOKEN || '-';
 const LIKES_MODE = (process.env.LIKES_MODE || 'delta').toLowerCase();
 
 // Раздаём всю папку towerdef как статику
