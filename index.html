@@ -11,6 +11,7 @@
 <body>
 <canvas id="gameCanvas"></canvas>
 <div style="width:640px;margin:10px auto 0 auto;display:flex;justify-content:center;align-items:center;gap:16px;">
+  <button id="startRunBtn" style="font-size:18px; padding:6px 12px;">Start</button>
   <button id="spawnPlus" style="font-size:24px;">+</button>
   <span id="spawnRateDisplay" style="font-size:18px;color:white;font-family:sans-serif;text-shadow:0 0 2px #000;">0.01</span>
 </div>
@@ -89,15 +90,37 @@ const BASE_ENEMY_BASE_DAMAGE = 1;
 const ENEMY_SCALED_HP = Math.max(1, Math.round(BASE_ENEMY_HP / ENEMY_DENSITY_SCALE));
 const ENEMY_SCALED_BASE_DAMAGE = Math.max(1, Math.round(BASE_ENEMY_BASE_DAMAGE / ENEMY_DENSITY_SCALE));
 
-// --- РЕЖИМ РЕСТАРТА ПО ЛАЙКАМ ---
+// --- РЕЖИМ РЕСТАРТА ПО ЛАЙКАМ / РУЧНОЙ СТАРТ ---
+// Флаг использования рестарта по лайкам. Если false — можно запускать забег вручную кнопкой "Start"
+const USE_LIKES_RESTART = true; // переключите на false, чтобы отключить механику лайков
 // Порог лайков для старта/рестарта (редактируйте при необходимости)
 let RESTART_LIKES_TARGET = 10;
 // Состояние игры: 'running' | 'waitingRestart'
-let gameState = 'waitingRestart'; // игра стартует только после набора лайков
+let gameState = USE_LIKES_RESTART ? 'waitingRestart' : 'running';
 // Счётчик лайков в текущем окне ожидания
 let restartLikesAccum = 0;
 // Отслеживание лайков по пользователям, чтобы считать дельты независимо от серверного режима
 const lastSeenLikesByUser = Object.create(null);
+
+// Возможность отключать экран рестарта (оверлей)
+let SHOW_RESTART_OVERLAY = true; // переключайте на false, чтобы скрыть оверлей ожидания
+// Быстрый переключатель из консоли: setShowRestartOverlay(true/false)
+window.setShowRestartOverlay = function(v) { SHOW_RESTART_OVERLAY = !!v; };
+
+// Кнопка запуска забега вручную
+const startRunBtn = document.getElementById('startRunBtn');
+function updateUIButtons() {
+  if (!startRunBtn) return;
+  startRunBtn.style.display = (gameState === 'running') ? 'none' : 'inline-block';
+}
+if (startRunBtn) {
+  startRunBtn.onclick = () => {
+    startGameRun();
+    updateUIButtons();
+  };
+}
+// Первичная синхронизация видимости кнопки после определения gameState
+updateUIButtons();
 
 // --- Зоны для спавна башен зрителей (по картинке) ---
 const ALLOWED_TOWER_ZONES = [
@@ -846,6 +869,8 @@ function startGameRun() {
   base.hp = 100;
   restartLikesAccum = 0;
   gameState = 'running';
+  // обновим UI-кнопки, если функция уже объявлена
+  if (typeof updateUIButtons === 'function') updateUIButtons();
 }
 
 function addRestartLikes(delta) {
@@ -933,14 +958,21 @@ function gameLoop() {
 
   ctx.restore();
 
-  // Переход в режим ожидания при смерти базы
+  // Переход в режим ожидания при смерти базы (или мгновенный рестарт, если лайк-режим отключён)
   if (gameState === 'running' && base.hp <= 0) {
-    gameState = 'waitingRestart';
-    softResetToWaiting();
+    if (USE_LIKES_RESTART) {
+      gameState = 'waitingRestart';
+      softResetToWaiting();
+      if (typeof updateUIButtons === 'function') updateUIButtons();
+    } else {
+      // Чистим сцену и сразу стартуем новый забег
+      softResetToWaiting();
+      startGameRun();
+    }
   }
 
-  // Оверлей ожидания
-  if (gameState === 'waitingRestart') {
+  // Оверлей ожидания (показывается только если включён лайк-режим и разрешён показ оверлея)
+  if (gameState === 'waitingRestart' && USE_LIKES_RESTART && SHOW_RESTART_OVERLAY) {
     drawGameOverOverlay();
   }
 
