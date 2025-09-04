@@ -16,10 +16,18 @@
 </div>
 <span id="spawnRateCorner" style="position:fixed;top:8px;left:8px;font-size:13px;color:#fff;background:rgba(0,0,0,0.5);padding:2px 7px;border-radius:7px;font-family:sans-serif;z-index:10;pointer-events:none;">rate: 0.01</span>
 <audio id="spawnTowerSound" src="sound/spawnTower.mp3" preload="auto"></audio>
+<audio id="basicTowerShotSound" src="sound/laserShot_basicTower.mp3" preload="auto"></audio>
+<audio id="golemSpawnSound" src="sound/Monster_Roar7.mp3" preload="auto"></audio>
 <script src="leaderboard.js"></script>
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+
+// --- НАСТРОЙКИ ГРОМКОСТИ ЗВУКОВ ---
+// Диапазон значений: 0.0 (тихо) — 1.0 (макс)
+const SPAWN_TOWER_VOL = 0.6;      // громкость звука появления башни
+const BASIC_SHOT_VOL = 0.13;      // громкость выстрела обычной башни
+const GOLEM_SPAWN_VOL = 0.3;      // громкость рыка при спавне голема
 
 // Images
 const bgImage = new Image();
@@ -36,6 +44,16 @@ turretImg.src = './turret.png';
 
 const golemSprite = new Image();
 golemSprite.src = './Golem_1_walk.png';
+
+// Спрайт смерти голема (10 кадров, спрайт-лист 900x40)
+const golemDieSprite = new Image();
+golemDieSprite.src = './Golem_1_die_1.png';
+
+// Спрайт взрыва для базового моба (10 кадров по горизонтали, 352x32)
+const explosionBasicMobSprite = new Image();
+explosionBasicMobSprite.src = './explosion_basicMob_2.png';
+// Коэффициент масштабирования взрыва ("немного больше")
+const EXPLOSION_BASIC_SCALE = 1.5;
 
 // Спрайт башни за подарок 1 уровня
 const giftL1Img = new Image();
@@ -61,7 +79,25 @@ const path = [
   { x: 520, y: 210 }
 ];
 
-let enemySpawnRate = 0.007;
+let enemySpawnRate = 0.004; // ниже стартовая частота спавна
+// Коэффициент плотности обычных мобов: <1 — реже спавн; баланс сохраняем повышением HP и урона
+const ENEMY_DENSITY_SCALE = 0.33; // ~в 3 раза меньше мобов
+// Базовые параметры обычного моба до масштабирования
+const BASE_ENEMY_HP = 3;
+const BASE_ENEMY_BASE_DAMAGE = 1;
+// Производные параметры под масштаб
+const ENEMY_SCALED_HP = Math.max(1, Math.round(BASE_ENEMY_HP / ENEMY_DENSITY_SCALE));
+const ENEMY_SCALED_BASE_DAMAGE = Math.max(1, Math.round(BASE_ENEMY_BASE_DAMAGE / ENEMY_DENSITY_SCALE));
+
+// --- РЕЖИМ РЕСТАРТА ПО ЛАЙКАМ ---
+// Порог лайков для старта/рестарта (редактируйте при необходимости)
+let RESTART_LIKES_TARGET = 10;
+// Состояние игры: 'running' | 'waitingRestart'
+let gameState = 'waitingRestart'; // игра стартует только после набора лайков
+// Счётчик лайков в текущем окне ожидания
+let restartLikesAccum = 0;
+// Отслеживание лайков по пользователям, чтобы считать дельты независимо от серверного режима
+const lastSeenLikesByUser = Object.create(null);
 
 // --- Зоны для спавна башен зрителей (по картинке) ---
 const ALLOWED_TOWER_ZONES = [
@@ -70,6 +106,90 @@ const ALLOWED_TOWER_ZONES = [
   // другие зоны не используются
 ];
 let showTowerZones = false; // Показывать красные зоны (можно убрать потом)
+
+// --- Запрет спавна башен на дороге у мобов ---
+// Радиус запрета размещения башен около пути (в игровых пикселях 640x480)
+const PATH_FORBIDDEN_RADIUS = 24;
+
+// Расстояние от точки до отрезка
+function distancePointToSegment(px, py, x1, y1, x2, y2) {
+  const vx = x2 - x1, vy = y2 - y1;
+  const wx = px - x1, wy = py - y1;
+  const c1 = vx * wx + vy * wy;
+  if (c1 <= 0) return Math.hypot(px - x1, py - y1);
+  const c2 = vx * vx + vy * vy;
+  if (c2 <= c1) return Math.hypot(px - x2, py - y2);
+  const b = c1 / c2;
+  const bx = x1 + b * vx, by = y1 + b * vy;
+  return Math.hypot(px - bx, py - by);
+}
+
+// Проверка: точка близко к любому сегменту пути
+function isNearPath(x, y, threshold = PATH_FORBIDDEN_RADIUS) {
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i], b = path[i + 1];
+    const d = distancePointToSegment(x, y, a.x, a.y, b.x, b.y);
+    if (d < threshold) return true;
+  }
+  return false;
+}
+
+// --- Геометрия для определения слоя отрисовки относительно дороги ---
+// Ближайшая точка на сегменте AB к P(px,py)
+function closestPointOnSegment(px, py, x1, y1, x2, y2) {
+  const vx = x2 - x1, vy = y2 - y1;
+  const wx = px - x1, wy = py - y1;
+  const c2 = vx * vx + vy * vy;
+  if (c2 <= 1e-6) return { x: x1, y: y1, t: 0 };
+  let t = (vx * wx + vy * wy) / c2;
+  t = Math.max(0, Math.min(1, t));
+  return { x: x1 + t * vx, y: y1 + t * vy, t };
+}
+
+// Возвращает Y ближайшей точки пути к (x,y)
+function getClosestPathY(x, y) {
+  let best = null;
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i], b = path[i + 1];
+    const p = closestPointOnSegment(x, y, a.x, a.y, b.x, b.y);
+    const dx = p.x - x, dy = p.y - y;
+    const dist2 = dx * dx + dy * dy;
+    if (!best || dist2 < best.dist2) best = { y: p.y, dist2 };
+  }
+  return best ? best.y : null;
+}
+
+// Возвращает "земельную" Y башни для сравнения с дорогой
+function getTowerGroundY(t) {
+  // Для подарочной башни учитываем смещение основания
+  if (t instanceof GiftAvatarTower) {
+    const cfg = GIFT_TOWER_LEVELS[t.level] || GIFT_TOWER_LEVELS[1];
+    return t.y + (cfg && cfg.baseYOffset ? cfg.baseYOffset : 0);
+  }
+  // Обычные башни и аватар-башни — используем их Y как базу
+  return t.y;
+}
+
+// Небольшой порог, чтобы избежать мигания на границе дороги
+const FRONT_Y_EPS = 4;
+
+// Поиск валидной позиции внутри разрешённых зон, вдали от пути
+function findValidSpawnPos() {
+  const zone = ALLOWED_TOWER_ZONES[0];
+  const [x1, y1, x2, y2] = zone;
+  const w = x2 - x1, h = y2 - y1;
+  const radius = 16;
+  if (w < radius * 2 || h < radius * 2) {
+    return { x: x1 + w / 2, y: y1 + h / 2 };
+  }
+  for (let attempts = 0; attempts < 60; attempts++) {
+    const x = x1 + radius + Math.random() * (w - radius * 2);
+    const y = y1 + radius + Math.random() * (h - radius * 2);
+    if (!isNearPath(x, y)) return { x, y };
+  }
+  // fallback: вернём центр зоны, даже если рядом с путём
+  return { x: x1 + w / 2, y: y1 + h / 2 };
+}
 
 // Характеристики подарочных башен по уровням (боевые и визуальные)
 const GIFT_TOWER_LEVELS = {
@@ -101,9 +221,15 @@ const GIFT_TOWER_LEVELS = {
     avatarYOffset: 32,
     avatarRadius: 15,
     avatarStroke: 6,
-    avatarStrokeColor: '#FF0000' // цвет обводки круга для L2 (золото)
+    avatarStrokeColor: '#FF0000' // цвет обводки круга для L2
   }
 };
+
+// Цвет пули для подарочной башни по уровню (совпадает с цветом обводки аватарки)
+function getGiftTowerBulletColor(level) {
+  const cfg = GIFT_TOWER_LEVELS[level] || GIFT_TOWER_LEVELS[1];
+  return cfg && cfg.avatarStrokeColor ? cfg.avatarStrokeColor : 'yellow';
+}
 
 function randomTowerPositionInAllowedZones() {
   const zone = ALLOWED_TOWER_ZONES[0];
@@ -116,9 +242,8 @@ function randomTowerPositionInAllowedZones() {
     console.warn('[TOWER_SPAWN_DEBUG] маленькая зона', pos, 'zone:', [x1, y1, x2, y2]);
     return pos;
   }
-  const x = x1 + radius + Math.random() * (w - radius * 2);
-  const y = y1 + radius + Math.random() * (h - radius * 2);
-  const pos = { x, y };
+  // Выбираем позицию вдали от пути
+  const pos = findValidSpawnPos();
   console.warn('[TOWER_SPAWN_DEBUG] выпало', pos, 'zone:', [x1, y1, x2, y2]);
   return pos;
 }
@@ -129,7 +254,7 @@ class Enemy {
     this.y = path[0].y;
     this.pathIndex = 0;
     this.speed = 1;
-    this.hp = 3;
+    this.hp = ENEMY_SCALED_HP;
     this.dead = false;
 
     // Animation
@@ -138,9 +263,28 @@ class Enemy {
     this.frameCounter = 0;
     this.frameWidth = 80;
     this.frameHeight = 80;
+
+    // Death (explosion) animation
+    this.dying = false;
+    this.dieFrame = 0;
+    this.dieFrameDelay = 3; // быстрее, чем у голема
+    this.dieFrameCounter = 0;
+    this.dieFramesTotal = 11; // теперь 11 кадров
   }
 
   update() {
+    // Если идёт анимация смерти — проигрываем и выходим
+    if (this.dying) {
+      this.dieFrameCounter++;
+      if (this.dieFrameCounter >= this.dieFrameDelay) {
+        this.dieFrameCounter = 0;
+        this.dieFrame++;
+        if (this.dieFrame >= this.dieFramesTotal) {
+          this.dead = true;
+        }
+      }
+      return;
+    }
     // Animate
     this.frameCounter++;
     if (this.frameCounter >= this.frameDelay) {
@@ -151,7 +295,7 @@ class Enemy {
     // Move
     const target = path[this.pathIndex + 1];
     if (!target) {
-      base.hp--;
+      base.hp -= ENEMY_SCALED_BASE_DAMAGE;
       this.dead = true;
       return;
     }
@@ -167,6 +311,25 @@ class Enemy {
   }
 
   draw() {
+    // Если умирает — рисуем взрыв меньшего размера
+    if (this.dying) {
+      if (explosionBasicMobSprite.complete && explosionBasicMobSprite.width > 0) {
+        const fw = explosionBasicMobSprite.width / 11; // 11 кадров по горизонтали
+        const fh = explosionBasicMobSprite.height;
+        const sx = Math.min(this.dieFrame, 10) * fw;
+        const sy = 0;
+        // Центруем по нижнему центру моба (как сам моб), чуть выше земли
+        const drawW = fw * EXPLOSION_BASIC_SCALE; // масштабируем немного больше
+        const drawH = fh * EXPLOSION_BASIC_SCALE;
+        ctx.drawImage(
+          explosionBasicMobSprite,
+          sx, sy, fw, fh,
+          this.x - drawW / 2, this.y - drawH, // нижний центр
+          drawW, drawH
+        );
+      }
+      return;
+    }
     // Для всех мобов: якорь по центру НИЗА (ноги идут по линии пути)
     // Спрайт 60x60: смещаем по x на -30, по y на -60 (нижний центр)
     ctx.drawImage(
@@ -176,6 +339,13 @@ class Enemy {
       this.x - 30, this.y - 60, // x - w/2, y - h (центр по низу)
       60, 60
     );
+  }
+
+  startDying() {
+    if (this.dying) return;
+    this.dying = true;
+    this.dieFrame = 0;
+    this.dieFrameCounter = 0;
   }
 }
 
@@ -188,6 +358,9 @@ class Tower {
     this.cooldown = 0;
     this.killCount = 0;
     this.shotsLeft = 50; // Лимит выстрелов
+    // Для редкого звука выстрела
+    this.shotCounter = 0;
+    this.shotSoundEveryN = 3; // играть звук каждого N-го выстрела
     this.dead = false;   // Флаг удаления
   }
 
@@ -207,6 +380,11 @@ class Tower {
         bullets.push(new Bullet(this.x, this.y, e, this));
         this.cooldown = this.fireRate;
         this.shotsLeft--;
+        // Редко проигрываем звук выстрела, чтобы не спамить
+        this.shotCounter = (this.shotCounter + 1) % this.shotSoundEveryN;
+        if (this.shotCounter === 0) {
+          playBasicTowerShotSound();
+        }
         break;
       }
     }
@@ -378,8 +556,13 @@ class Bullet {
           this.ownerTower.killCount++;
           updateLeaderboardFromTowers();
         }
-        if (this.target.hp <= 0) {
-          this.target.dead = true; // фикс: враг удаляется с поля
+      }
+      // При нулевом HP — запускаем анимацию смерти (для всех типов врагов)
+      if (this.target.hp <= 0) {
+        if (typeof this.target.startDying === 'function') {
+          this.target.startDying();
+        } else {
+          this.target.dead = true;
         }
       }
       this.dead = true;
@@ -390,7 +573,12 @@ class Bullet {
   }
 
   draw() {
-    ctx.fillStyle = 'yellow';
+    // Цвет пули: для подарочных башен берём цвет обводки аватарки (по уровню)
+    if (this.ownerTower instanceof GiftAvatarTower) {
+      ctx.fillStyle = getGiftTowerBulletColor(this.ownerTower.level);
+    } else {
+      ctx.fillStyle = 'black';
+    }
     ctx.beginPath();
     ctx.arc(this.x, this.y, 3, 0, Math.PI * 2);
     ctx.fill();
@@ -426,7 +614,7 @@ class GolemBullet {
   }
   draw() {
     ctx.save();
-    ctx.fillStyle = 'red';
+    ctx.fillStyle = 'yellow';
     ctx.beginPath();
     ctx.arc(this.x, this.y, 8, 0, Math.PI * 2);
     ctx.fill();
@@ -449,12 +637,33 @@ class GolemEnemy extends Enemy {
     this.frameHeight = 52; // было 40, теперь +12
     this.sizeOffsetY = 26; // для центровки
     this.visualScale = 1.4; // Увеличиваем голема на 40%
+
+    // Анимация смерти
+    this.dying = false;
+    this.dieFrame = 0;
+    this.dieFrameDelay = 5; // скорость проигрывания смерти
+    this.dieFrameCounter = 0;
+    this.dieFrameWidth = 90;
+    this.dieFrameHeight = 40;
+    this.dieFramesTotal = 10; // 900/90
   }
 
   update() {
-    // смерть при 0 HP
+    // Если идёт анимация смерти — проигрываем и выходим
+    if (this.dying) {
+      this.dieFrameCounter++;
+      if (this.dieFrameCounter >= this.dieFrameDelay) {
+        this.dieFrameCounter = 0;
+        this.dieFrame++;
+        if (this.dieFrame >= this.dieFramesTotal) {
+          this.dead = true; // удаляем врага после завершения анимации
+        }
+      }
+      return;
+    }
+    // смерть при 0 HP — старт анимации
     if (this.hp <= 0) {
-      this.dead = true;
+      this.startDying();
       return;
     }
     const target = path[this.pathIndex + 1];
@@ -487,6 +696,13 @@ class GolemEnemy extends Enemy {
     }
   }
 
+  startDying() {
+    if (this.dying) return;
+    this.dying = true;
+    this.dieFrame = 0;
+    this.dieFrameCounter = 0;
+  }
+
   findNearestTower() {
     let minDist = 9999, nearest = null;
     for (const t of towers) {
@@ -512,6 +728,22 @@ class GolemEnemy extends Enemy {
 
   draw() {
     const scale = this.visualScale;
+    if (this.dying) {
+      // Рисуем анимацию смерти; якорим по нижнему центру как и ходьбу
+      const sx = this.dieFrame * this.dieFrameWidth;
+      const sy = 0;
+      const dw = this.dieFrameWidth * scale;
+      const dh = this.dieFrameHeight * scale;
+      ctx.drawImage(
+        golemDieSprite,
+        sx, sy,
+        this.dieFrameWidth, this.dieFrameHeight,
+        this.x - (this.dieFrameWidth/2) * scale, this.y - this.sizeOffsetY * scale,
+        dw, dh
+      );
+      return;
+    }
+    // Обычная анимация ходьбы + HP bar
     ctx.drawImage(
       golemSprite,
       this.frame * this.frameWidth, 0,
@@ -559,6 +791,77 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
+function drawGameOverOverlay() {
+  // затемняющий слой
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // текст
+  ctx.font = 'bold 64px Arial';
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = 'black';
+  ctx.fillStyle = '#ff4444';
+  ctx.textAlign = 'center';
+  ctx.strokeText('GAME OVER', canvas.width/2, canvas.height/2 - 20);
+  ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 20);
+
+  // строка "NNN❤️ before RESTART!"
+  const remaining = Math.max(0, RESTART_LIKES_TARGET - restartLikesAccum);
+  ctx.font = 'bold 36px Arial';
+  const text = `${remaining}\u2764\ufe0f before RESTART!`;
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = 'black';
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeText(text, canvas.width/2, canvas.height/2 + 40);
+  ctx.fillText(text, canvas.width/2, canvas.height/2 + 40);
+
+  // прогресс-бар
+  const barW = Math.min(600, canvas.width * 0.8);
+  const barH = 20;
+  const barX = (canvas.width - barW) / 2;
+  const barY = canvas.height/2 + 70;
+  const p = Math.min(1, restartLikesAccum / RESTART_LIKES_TARGET);
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.fillRect(barX, barY, barW, barH);
+  ctx.fillStyle = '#ff2e88';
+  ctx.fillRect(barX, barY, barW * p, barH);
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(barX, barY, barW, barH);
+  ctx.restore();
+}
+
+function softResetToWaiting() {
+  // Останавливаем бой: чистим сущности и фиксируем спавн
+  enemies.length = 0;
+  bullets.length = 0;
+  towers.length = 0;
+  enemySpawnRate = 0.004; // сброс к новому стартовому значению
+  updateSpawnRateDisplay();
+}
+
+function startGameRun() {
+  // Полный рестарт параметров уровня
+  base.hp = 100;
+  restartLikesAccum = 0;
+  gameState = 'running';
+}
+
+function addRestartLikes(delta) {
+  const add = Math.max(0, Number(delta) || 0);
+  if (add <= 0) return;
+  restartLikesAccum += add;
+  if (restartLikesAccum >= RESTART_LIKES_TARGET && gameState === 'waitingRestart') {
+    startGameRun();
+  }
+}
+
+// Для удобства — изменить порог из консоли
+window.setRestartTarget = function(n) {
+  RESTART_LIKES_TARGET = Math.max(1, Number(n) || RESTART_LIKES_TARGET);
+}
+
 function gameLoop() {
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0); // reset transform
@@ -577,62 +880,77 @@ function gameLoop() {
     }
   }
 
-  // --- SPAWN GOLEM IF NEEDED ---
-  checkGolemSpawn();
+  if (gameState === 'running') {
+    // --- SPAWN GOLEM IF NEEDED ---
+    checkGolemSpawn();
 
-  // Spawn обычных врагов
-  if (Math.random() < enemySpawnRate) enemies.push(new Enemy());
+    // Spawn обычных врагов
+    // Спавним обычных мобов с учётом масштабирования плотности
+    if (Math.random() < enemySpawnRate * ENEMY_DENSITY_SCALE) enemies.push(new Enemy());
 
-  // Update
-  for (const t of towers) t.update();
-  for (const e of enemies) e.update();
-  for (const b of bullets) b.update();
+    // Update
+    for (const t of towers) t.update();
+    for (const e of enemies) e.update();
+    for (const b of bullets) b.update();
+  }
 
   // Draw
   drawBase();
-  for (const t of towers) t.draw();
-  // Сначала рисуем обычных мобов
+  // Разбиваем башни на дальние (за дорогой) и ближние (перед дорогой)
+  const backTowers = [];
+  const frontTowers = [];
+  for (const t of towers) {
+    const gy = getTowerGroundY(t);
+    const cy = getClosestPathY(t.x, gy);
+    if (cy == null || gy <= cy + FRONT_Y_EPS) backTowers.push(t); else frontTowers.push(t);
+  }
+  // 1) Дальние башни под мобами
+  for (const t of backTowers) t.draw();
+  // 2) Враги
   for (const e of enemies) if (!(e instanceof GolemEnemy)) e.draw();
-  // Потом рисуем всех големов поверх
   for (const e of enemies) if (e instanceof GolemEnemy) e.draw();
+  // 3) Ближние башни поверх мобов
+  for (const t of frontTowers) t.draw();
+  // 4) Пули поверх всего
   for (const b of bullets) b.draw();
 
   // Remove dead
-  for (let i = enemies.length - 1; i >= 0; i--) {
-    if (enemies[i].dead) enemies.splice(i, 1);
-  }
-  for (let i = bullets.length - 1; i >= 0; i--) {
-    if (bullets[i].dead) bullets.splice(i, 1);
-  }
-  for (let i = towers.length - 1; i >= 0; i--) {
-    if (towers[i].dead) {
-      enemySpawnRate = Math.max(0, enemySpawnRate - 0.0025);
-      updateSpawnRateDisplay();
-      towers.splice(i, 1);
+  if (gameState === 'running') {
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      if (enemies[i].dead) enemies.splice(i, 1);
+    }
+    for (let i = bullets.length - 1; i >= 0; i--) {
+      if (bullets[i].dead) bullets.splice(i, 1);
+    }
+    for (let i = towers.length - 1; i >= 0; i--) {
+      if (towers[i].dead) {
+        enemySpawnRate = Math.max(0, enemySpawnRate - 0.0015); // уменьшили шаг уменьшения при удалении башни
+        updateSpawnRateDisplay();
+        towers.splice(i, 1);
+      }
     }
   }
 
   ctx.restore();
 
-  if (base.hp > 0) {
-    requestAnimationFrame(gameLoop);
-  } else {
-    ctx.save();
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.font = 'bold 48px Arial';
-    ctx.lineWidth = 7;
-    ctx.strokeStyle = 'black';
-    ctx.fillStyle = 'red';
-    ctx.textAlign = 'center';
-    ctx.strokeText('Game Over', canvas.width/2, canvas.height/2);
-    ctx.fillText('Game Over', canvas.width/2, canvas.height/2);
-    ctx.restore();
+  // Переход в режим ожидания при смерти базы
+  if (gameState === 'running' && base.hp <= 0) {
+    gameState = 'waitingRestart';
+    softResetToWaiting();
   }
+
+  // Оверлей ожидания
+  if (gameState === 'waitingRestart') {
+    drawGameOverOverlay();
+  }
+
+  requestAnimationFrame(gameLoop);
 }
 
 function checkGolemSpawn() {
   if (towers.length >= 5 && !enemies.some(e => e instanceof GolemEnemy)) {
     enemies.push(new GolemEnemy());
+    playGolemSpawnSound();
   }
 }
 
@@ -661,26 +979,74 @@ function updateLeaderboardFromTowers() {
 function playSpawnTowerSound() {
   const audio = document.getElementById('spawnTowerSound');
   if (audio) {
+    audio.volume = SPAWN_TOWER_VOL;
     audio.currentTime = 0;
     audio.play();
   }
 }
 
+function playGolemSpawnSound() {
+  const audio = document.getElementById('golemSpawnSound');
+  if (!audio) return;
+  try {
+    audio.volume = GOLEM_SPAWN_VOL;
+    audio.currentTime = 0;
+    audio.play();
+  } catch (e) {
+    // Игнорируем ошибки автоплея
+  }
+}
+
+// Рык голема при спавне
+function playGolemSpawnSound() {
+  const audio = document.getElementById('golemSpawnSound');
+  if (audio) {
+    audio.volume = GOLEM_SPAWN_VOL;
+    audio.currentTime = 0;
+    audio.play();
+  }
+}
+
+// --- ЗВУК ВЫСТРЕЛА ОБЫЧНОЙ БАШНИ (с троттлингом) ---
+const BASIC_SHOT_SOUND_MIN_INTERVAL_MS = 140; // минимальный интервал между звуками
+let lastBasicShotSoundTs = 0;
+function playBasicTowerShotSound() {
+  const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+  if (now - lastBasicShotSoundTs < BASIC_SHOT_SOUND_MIN_INTERVAL_MS) return; // слишком часто
+  const audio = document.getElementById('basicTowerShotSound');
+  if (!audio) return;
+  try {
+    audio.volume = BASIC_SHOT_VOL;
+    audio.currentTime = 0;
+    audio.play();
+    lastBasicShotSoundTs = now;
+  } catch (e) {
+    // Игнорируем ошибки воспроизведения (например, политика автоплея)
+  }
+}
+
 canvas.addEventListener('click', (e) => {
+  if (gameState !== 'running') return; // блокируем клик-спавн до старта
   const rect = canvas.getBoundingClientRect();
   const rawX = e.clientX - rect.left;
   const rawY = e.clientY - rect.top;
   const scale = Math.min(canvas.width / 640, canvas.height / 480);
   const x = rawX / scale;
   const y = rawY / scale;
-  towers.push(new Tower(x, y));
+  let spawn = { x, y };
+  if (isNearPath(x, y)) {
+    // Если кликнули слишком близко к дороге — подберём безопасную позицию в разрешённых зонах
+    spawn = findValidSpawnPos();
+    console.warn('[SPAWN] Клик рядом с дорогой — смещаем башню в безопасную позицию', spawn);
+  }
+  towers.push(new Tower(spawn.x, spawn.y));
   playSpawnTowerSound();
-  enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
+  enemySpawnRate = Math.min(enemySpawnRate + 0.0015, 1); // немного пониженный прирост при добавлении башни
   updateSpawnRateDisplay();
 });
 
 document.getElementById('spawnPlus').onclick = () => {
-  enemySpawnRate = Math.min(enemySpawnRate + 0.005, 1);
+  enemySpawnRate = Math.min(enemySpawnRate + 0.003, 1); // меньший шаг ручного увеличения
   updateSpawnRateDisplay();
 };
 updateSpawnRateDisplay();
@@ -697,6 +1063,7 @@ tiktokSocket.onmessage = function(event) {
   try {
     const data = JSON.parse(event.data);
     if (data.type === 'newTower') {
+      if (gameState !== 'running') return; // не спавним до старта
       const pos = randomTowerPositionInAllowedZones();
       if (data.avatar) {
         const img = new Image();
@@ -705,22 +1072,23 @@ tiktokSocket.onmessage = function(event) {
         img.onload = () => {
           towers.push(new AvatarTower(pos.x, pos.y, img, data.nickname, data.userId));
           playSpawnTowerSound();
-          enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
+          enemySpawnRate = Math.min(enemySpawnRate + 0.0015, 1); // при успешной загрузке аватара
           updateSpawnRateDisplay();
         };
         img.onerror = () => {
           towers.push(new Tower(pos.x, pos.y));
           playSpawnTowerSound();
-          enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
+          enemySpawnRate = Math.min(enemySpawnRate + 0.0015, 1); // при ошибке аватара
           updateSpawnRateDisplay();
         };
       } else {
         towers.push(new Tower(pos.x, pos.y));
         playSpawnTowerSound();
-        enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
+        enemySpawnRate = Math.min(enemySpawnRate + 0.0015, 1);
         updateSpawnRateDisplay();
       }
     } else if (data.type === 'newGiftTower') {
+      if (gameState !== 'running') return; // не спавним до старта
       const pos = randomTowerPositionInAllowedZones();
       const lvl = Number(data.level || 1);
       console.log('[WS] newGiftTower', {pos, lvl, hasAvatar: !!data.avatar, nickname: data.nickname, userId: data.userId});
@@ -732,21 +1100,21 @@ tiktokSocket.onmessage = function(event) {
           console.log('[WS] avatar loaded for gift tower');
           towers.push(new GiftAvatarTower(pos.x, pos.y, img, data.nickname, data.userId, lvl));
           playSpawnTowerSound();
-          enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
+          enemySpawnRate = Math.min(enemySpawnRate + 0.0015, 1); // подарочная башня с аватаром
           updateSpawnRateDisplay();
         };
         img.onerror = () => {
           console.warn('[WS] avatar failed to load, spawning without avatar');
           towers.push(new GiftAvatarTower(pos.x, pos.y, null, data.nickname, data.userId, lvl));
           playSpawnTowerSound();
-          enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
+          enemySpawnRate = Math.min(enemySpawnRate + 0.0015, 1); // подарочная башня без аватара (ошибка)
           updateSpawnRateDisplay();
         };
       } else {
         console.log('[WS] spawning gift tower without avatar');
         towers.push(new GiftAvatarTower(pos.x, pos.y, null, data.nickname, data.userId, lvl));
         playSpawnTowerSound();
-        enemySpawnRate = Math.min(enemySpawnRate + 0.0025, 1);
+        enemySpawnRate = Math.min(enemySpawnRate + 0.0015, 1);
         updateSpawnRateDisplay();
       }
     } else if (data.type === 'extLog') {
@@ -755,6 +1123,22 @@ tiktokSocket.onmessage = function(event) {
           console.log('[EXT][RAW]', data.message);
         } else {
           console.log('[EXT][EVENT]', data.eventType, data.payload);
+          // Накопление лайков для рестарта: считаем дельту по каждому пользователю
+          if (data.eventType === 'LIKE' && data.payload && data.payload.user) {
+            const user = String(data.payload.user);
+            const likesVal = Number(data.payload.likes || 0);
+            const prev = lastSeenLikesByUser[user] || 0;
+            // если сервер прислал дельту — prev обновим суммой; если прислал кумулятив — возьмём приращение
+            const delta = Math.max(0, likesVal - prev);
+            // Heuristic: если likesVal выглядит как дельта (малое и prev=0), добавим напрямую и увеличим prev на likesVal
+            if (likesVal > 0 && delta === likesVal) {
+              lastSeenLikesByUser[user] = prev + likesVal;
+              if (gameState === 'waitingRestart') addRestartLikes(likesVal);
+            } else if (delta > 0) {
+              lastSeenLikesByUser[user] = likesVal;
+              if (gameState === 'waitingRestart') addRestartLikes(delta);
+            }
+          }
         }
       } else if (origTikTokMsgHandler) {
         origTikTokMsgHandler.call(tiktokSocket, event);
