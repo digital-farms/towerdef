@@ -18,9 +18,9 @@ let leaderboardData = [];
 //   TT_STREAMER    — ник стримера (например, enfor.cross)
 //   TT_TOKEN       — Bearer-токен авторизации
 //   LIKES_MODE     — 'delta' (likes — приращение) или 'cumulative' (likes — суммарно)
-const STREAM_HOST = process.env.TT_SERVER_HOST || 'tiktokliveserver.org';
-const STREAMER = process.env.TT_STREAMER || 'sofia_asmrtist';
-const TOKEN = process.env.TT_TOKEN || '-';
+const STREAM_HOST = process.env.TT_SERVER_HOST || '100.70.128.72';
+const STREAMER = process.env.TT_STREAMER || 'graceh.asmr';
+const TOKEN = process.env.TT_TOKEN || '3debd82ada04ab756d750d3c7d8295e4ad958e440ba7fd7135e31bba370c1a8d777862c62b3e45fe570640e5c54de641b7c89a7c82732a9489fd156c50f6cec8';
 const LIKES_MODE = (process.env.LIKES_MODE || 'delta').toLowerCase();
 
 // Раздаём всю папку towerdef как статику
@@ -46,11 +46,12 @@ function startListenHTTP() {
   return new Promise((resolve) => {
     const options = {
       hostname: STREAM_HOST,
+      port: 8001,
       path: `/listen/${encodeURIComponent(STREAMER)}`,
       method: 'POST',
       headers: TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {},
     };
-    const req = https.request(options, (res) => {
+    const req = http.request(options, (res) => {
       let body = '';
       res.on('data', (chunk) => (body += chunk));
       res.on('end', () => {
@@ -69,7 +70,7 @@ function startListenHTTP() {
 // Подключение к WebSocket источнику
 let extWS = null;
 function connectExternalWS() {
-  const url = `ws://${STREAM_HOST}/ws`;
+  const url = `ws://${STREAM_HOST}:8001/ws`;
   const wsOptions = TOKEN ? { headers: { Authorization: `Bearer ${TOKEN}` } } : {};
   logSrc(`Подключаюсь к ${url} (streamer=${STREAMER}, mode=${LIKES_MODE})`);
   extWS = new WebSocket(url, wsOptions);

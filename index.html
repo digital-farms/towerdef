@@ -84,8 +84,8 @@ let enemySpawnRate = 0.004; // ниже стартовая частота спа
 // Коэффициент плотности обычных мобов: <1 — реже спавн; баланс сохраняем повышением HP и урона
 const ENEMY_DENSITY_SCALE = 0.33; // ~в 3 раза меньше мобов
 // Базовые параметры обычного моба до масштабирования
-const BASE_ENEMY_HP = 3;
-const BASE_ENEMY_BASE_DAMAGE = 1;
+const BASE_ENEMY_HP = 2;           // было 3 — снизили, чтобы башни успевали убивать
+const BASE_ENEMY_BASE_DAMAGE = 0.33; // было 1 — снизили, чтобы урон по базе был ниже
 // Производные параметры под масштаб
 const ENEMY_SCALED_HP = Math.max(1, Math.round(BASE_ENEMY_HP / ENEMY_DENSITY_SCALE));
 const ENEMY_SCALED_BASE_DAMAGE = Math.max(1, Math.round(BASE_ENEMY_BASE_DAMAGE / ENEMY_DENSITY_SCALE));
@@ -94,7 +94,7 @@ const ENEMY_SCALED_BASE_DAMAGE = Math.max(1, Math.round(BASE_ENEMY_BASE_DAMAGE /
 // Флаг использования рестарта по лайкам. Если false — можно запускать забег вручную кнопкой "Start"
 const USE_LIKES_RESTART = true; // переключите на false, чтобы отключить механику лайков
 // Порог лайков для старта/рестарта (редактируйте при необходимости)
-let RESTART_LIKES_TARGET = 10;
+let RESTART_LIKES_TARGET = 100;
 // Состояние игры: 'running' | 'waitingRestart'
 let gameState = USE_LIKES_RESTART ? 'waitingRestart' : 'running';
 // Счётчик лайков в текущем окне ожидания
@@ -1155,20 +1155,23 @@ tiktokSocket.onmessage = function(event) {
           console.log('[EXT][RAW]', data.message);
         } else {
           console.log('[EXT][EVENT]', data.eventType, data.payload);
-          // Накопление лайков для рестарта: считаем дельту по каждому пользователю
+          // Накопление лайков для рестарта: корректно обрабатываем и кумулятивные, и дельта-сообщения
           if (data.eventType === 'LIKE' && data.payload && data.payload.user) {
             const user = String(data.payload.user);
             const likesVal = Number(data.payload.likes || 0);
-            const prev = lastSeenLikesByUser[user] || 0;
-            // если сервер прислал дельту — prev обновим суммой; если прислал кумулятив — возьмём приращение
-            const delta = Math.max(0, likesVal - prev);
-            // Heuristic: если likesVal выглядит как дельта (малое и prev=0), добавим напрямую и увеличим prev на likesVal
-            if (likesVal > 0 && delta === likesVal) {
-              lastSeenLikesByUser[user] = prev + likesVal;
-              if (gameState === 'waitingRestart') addRestartLikes(likesVal);
-            } else if (delta > 0) {
+            let prev = lastSeenLikesByUser[user] || 0;
+            let delta = 0;
+            if (likesVal >= prev) {
+              // Похоже на кумулятивный счётчик: берём приращение
+              delta = likesVal - prev;
               lastSeenLikesByUser[user] = likesVal;
-              if (gameState === 'waitingRestart') addRestartLikes(delta);
+            } else {
+              // Похоже на дельту (или счётчик обнулился): добавляем напрямую
+              delta = likesVal;
+              lastSeenLikesByUser[user] = prev + likesVal;
+            }
+            if (delta > 0 && gameState === 'waitingRestart') {
+              addRestartLikes(delta);
             }
           }
         }
