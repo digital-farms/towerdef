@@ -19,7 +19,7 @@ let leaderboardData = [];
 //   TT_TOKEN       — Bearer-токен авторизации
 //   LIKES_MODE     — 'delta' (likes — приращение) или 'cumulative' (likes — суммарно)
 const STREAM_HOST = process.env.TT_SERVER_HOST || '100.70.128.72';
-const STREAMER = process.env.TT_STREAMER || 'graceh.asmr';
+const STREAMER = process.env.TT_STREAMER || 'kaerukun_asmr';
 const TOKEN = process.env.TT_TOKEN || '3debd82ada04ab756d750d3c7d8295e4ad958e440ba7fd7135e31bba370c1a8d777862c62b3e45fe570640e5c54de641b7c89a7c82732a9489fd156c50f6cec8';
 const LIKES_MODE = (process.env.LIKES_MODE || 'delta').toLowerCase();
 
@@ -147,19 +147,28 @@ function connectExternalWS() {
       // Ожидаемый формат: { unique_id: 'streamer', event_type: 'LIKE', payload: { user: 'viewer', likes: 7 } }
       if (evt && evt.event_type === 'LIKE' && evt.payload && evt.payload.user) {
         const viewer = String(evt.payload.user);
-        const likesVal = Number(evt.payload.likes || 0);
+        const likesValRaw = evt.payload.likes ?? evt.payload.like_count ?? evt.payload.count ?? evt.payload.total ?? evt.payload.total_likes ?? 0;
+        const likesVal = Number(likesValRaw) || 0;
         const avatarUrl = evt.payload && evt.payload.avatar ? String(evt.payload.avatar) : null;
 
+        const prevForViewer = likeCounts[viewer] || 0;
         if (LIKES_MODE === 'cumulative') {
           // Значение — суммарные лайки пользователя
-          likeCounts[viewer] = Math.max(likeCounts[viewer] || 0, likesVal);
+          likeCounts[viewer] = Math.max(prevForViewer, likesVal);
         } else {
           // Значение — приращение (по умолчанию)
-          likeCounts[viewer] = (likeCounts[viewer] || 0) + likesVal;
+          likeCounts[viewer] = prevForViewer + likesVal;
         }
 
         const totalLikes = likeCounts[viewer];
-        logSrc(`${viewer} likes total=${totalLikes}`);
+        // Дельта для перезапуска: если cumulative — берём приращение к нашему last seen; если delta — берём как есть
+        const deltaForRestart = (LIKES_MODE === 'cumulative') ? Math.max(0, (likesVal - prevForViewer)) : Math.max(0, likesVal);
+        if (deltaForRestart > 0) {
+          const deltaMsg = JSON.stringify({ type: 'likesDelta', delta: deltaForRestart, user: viewer });
+          wss.clients.forEach((client) => { if (client.readyState === WebSocket.OPEN) client.send(deltaMsg); });
+        }
+
+        logSrc(`${viewer} likes total=${totalLikes} (delta=${deltaForRestart})`);
 
         // Сколько башен уже отправлено этому юзеру
         const prevCount = sentTowersCount[viewer] || 0;
