@@ -9,6 +9,11 @@ window.playGolemSpawnSound = function() {
   if (!audio) return; try { audio.volume = window.GOLEM_SPAWN_VOL; audio.currentTime = 0; audio.play(); } catch {}
 };
 
+window.playGolemDeathSound = function() {
+  const audio = document.getElementById('golemDeathSound');
+  if (!audio) return; try { audio.volume = window.GOLEM_DEATH_VOL; audio.currentTime = 0; audio.play(); } catch {}
+};
+
 const BASIC_SHOT_SOUND_MIN_INTERVAL_MS = 140;
 let lastBasicShotSoundTs = 0;
 window.playBasicTowerShotSound = function() {

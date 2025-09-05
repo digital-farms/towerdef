@@ -197,7 +197,11 @@
       if (this.bulletCooldown>0) this.bulletCooldown--; else { const t = this.findNearestTower(); if (t){ this.shootAt(t); this.bulletCooldown = this.fireRate; } }
       this.frameCounter++; if (this.frameCounter>=this.frameDelay){ this.frame=(this.frame+1) % window.GOLEM_ANIM_FRAMES; this.frameCounter=0; }
     }
-    startDying(){ if (this.dying) return; this.dying=true; this.dieFrame=0; this.dieFrameCounter=0; }
+    startDying(){
+      if (this.dying) return;
+      this.dying=true; this.dieFrame=0; this.dieFrameCounter=0;
+      if (typeof window.playGolemDeathSound === 'function') window.playGolemDeathSound();
+    }
     findNearestTower(){ let min=9999, nearest=null; for (const t of window.towers){ if (t.dead) continue; const d=Math.hypot(t.x-this.x, t.y-this.y); if (d<min){ min=d; nearest=t; } } return nearest; }
     shootAt(tower){ window.bullets.push(new window.GolemBullet(this.x, this.y, tower)); }
     onReachBase(){ window.base.hp -= window.GOLEM_BASE_DAMAGE; this.dead=true; }
