@@ -1,6 +1,8 @@
 // game.js
 (function(){
   const canvas = window.canvas; const ctx = window.ctx;
+  // Коллекция визуальных эффектов (например, вспышка при появлении башни)
+  window.effects = window.effects || [];
   window.updateSpawnRateDisplay = function(){
     document.getElementById('spawnRateDisplay').textContent = window.enemySpawnRate.toFixed(3);
     document.getElementById('spawnRateCorner').textContent = `rate: ${window.enemySpawnRate.toFixed(3)}`;
@@ -43,18 +45,29 @@
       for (const t of window.towers) t.update();
       for (const e of window.enemies) e.update();
       for (const b of window.bullets) b.update();
+      // Апдейт эффектов
+      for (const fx of window.effects) if (fx.update) fx.update();
     }
     window.drawBase();
     if (typeof drawSpawnGrid === 'function') drawSpawnGrid();
+    // Рисуем эффекты под башнями
+    for (const fx of window.effects) if (fx.draw) fx.draw();
     const backTowers=[], frontTowers=[];
-    for (const t of window.towers){ const gy=window.getTowerGroundY(t); const cy=window.getClosestPathY(t.x, gy); if (cy==null || gy <= cy + window.FRONT_Y_EPS) backTowers.push(t); else frontTowers.push(t); }
-    for (const t of backTowers) t.draw();
+    for (const t of window.towers){
+      const gy=window.getTowerGroundY(t);
+      const cy=window.getClosestPathY(t.x, gy);
+      if (cy==null || gy <= cy + window.FRONT_Y_EPS) backTowers.push({t, gy}); else frontTowers.push({t, gy});
+    }
+    // Сортируем по groundY: меньшие Y (сзади) рисуем раньше, большие Y (впереди) — позже
+    backTowers.sort((a,b)=>a.gy - b.gy);
+    frontTowers.sort((a,b)=>a.gy - b.gy);
+    for (const {t} of backTowers) t.draw();
     // 1) Сначала обычные мобы (без големов и боссов)
     for (const e of window.enemies) if (!(e instanceof window.GolemEnemy) && !(e instanceof window.BossEnemy)) e.draw();
     // 2) Затем големы
     for (const e of window.enemies) if (e instanceof window.GolemEnemy) e.draw();
     // 3) Башни, находящиеся перед дорогой
-    for (const t of frontTowers) t.draw();
+    for (const {t} of frontTowers) t.draw();
     // 4) Боссы поверх всего остального
     for (const e of window.enemies) if (e instanceof window.BossEnemy) e.draw();
     for (const b of window.bullets) b.draw();
@@ -63,6 +76,7 @@
       for (let i=window.enemies.length-1;i>=0;i--) if (window.enemies[i].dead) window.enemies.splice(i,1);
       for (let i=window.bullets.length-1;i>=0;i--) if (window.bullets[i].dead) window.bullets.splice(i,1);
       for (let i=window.towers.length-1;i>=0;i--) if (window.towers[i].dead){ window.enemySpawnRate = Math.max(0, window.enemySpawnRate - 0.0015); window.updateSpawnRateDisplay(); window.towers.splice(i,1); }
+      for (let i=window.effects.length-1;i>=0;i--) if (window.effects[i].dead) window.effects.splice(i,1);
     }
 
     ctx.restore();
@@ -75,7 +89,18 @@
     if (window.gameState !== 'running') return;
     const rect = canvas.getBoundingClientRect(); const rawX = e.clientX - rect.left; const rawY = e.clientY - rect.top; const scale = Math.min(canvas.width/640, canvas.height/480); const x = rawX/scale; const y = rawY/scale;
     let spawn = { x, y }; if (window.isNearPath(x, y)) { spawn = window.findValidSpawnPos(); console.warn('[SPAWN] Клик рядом с дорогой — смещаем башню в безопасную позицию', spawn); }
-    window.towers.push(new window.Tower(spawn.x, spawn.y)); window.playSpawnTowerSound(); window.enemySpawnRate = Math.min(window.enemySpawnRate + 0.0015, 1); window.updateSpawnRateDisplay();
+    const t = new window.Tower(spawn.x, spawn.y);
+    window.towers.push(t);
+    window.playSpawnTowerSound();
+    // Эффект появления башни (если включён)
+    if (window.TOWER_IMPACT_ENABLED && window.TowerSpawnImpact){
+      const gy = window.getTowerGroundY(t);
+      window.effects.push(new window.TowerSpawnImpact(t.x, gy));
+    }
+    // Рост частоты спавна врагов — по конфигу
+    const inc = (window.SPAWN_RATE_INC_PER_TOWER || 0.0015);
+    const cap = (window.SPAWN_RATE_CAP || 1);
+    window.enemySpawnRate = Math.min(window.enemySpawnRate + inc, cap); window.updateSpawnRateDisplay();
   });
 
   document.getElementById('spawnPlus').onclick = () => { window.enemySpawnRate = Math.min(window.enemySpawnRate + 0.003, 1); window.updateSpawnRateDisplay(); };

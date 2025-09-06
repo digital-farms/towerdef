@@ -11,6 +11,35 @@ window.distancePointToSegment = function(px, py, x1, y1, x2, y2) {
   return Math.hypot(px - bx, py - by);
 };
 
+// --- GRID ROW HELPERS (для стекования по горизонтальным линиям) ---
+window.getGridRowYs = function(zone){
+  const centers = window.computeGridCenters(zone);
+  if (!centers.length) return [];
+  // собираем уникальные Y с допуском (чтобы не плодить дубликаты из-за округлений)
+  const eps = 0.5;
+  const ys = [];
+  for (const c of centers){
+    let found=false; for (const y of ys){ if (Math.abs(y - c.y) <= eps){ found=true; break; } }
+    if (!found) ys.push(c.y);
+  }
+  ys.sort((a,b)=>a-b);
+  return ys;
+};
+
+window.getNearestGridRowIndexForY = function(y, rowYs){
+  if (!rowYs || !rowYs.length) return -1;
+  let bestIdx=0, best=Infinity;
+  for (let i=0;i<rowYs.length;i++){ const d=Math.abs(rowYs[i]-y); if (d<best){ best=d; bestIdx=i; } }
+  return bestIdx;
+};
+
+window.countTowersPerRow = function(rowYs){
+  const res = new Array(rowYs.length).fill(0);
+  if (!Array.isArray(window.towers)) return res;
+  for (const t of window.towers){ if (t && !t.dead){ const idx = window.getNearestGridRowIndexForY(t.y, rowYs); if (idx>=0) res[idx]++; } }
+  return res;
+};
+
 window.isNearPath = function(x, y, threshold = window.PATH_FORBIDDEN_RADIUS) {
   const path = window.path;
   for (let i = 0; i < path.length - 1; i++) {
@@ -167,21 +196,39 @@ window.computeGridCenters = function(zone){
 window.randomGridCenterInZone = function(zone){
   const centers = window.computeGridCenters(zone);
   if (!centers.length) return null;
-  // фильтруем точки близко к дороге
   const minDist = Number(window.TOWER_MIN_DISTANCE) || 0;
-  const validPath = centers.filter(c => !window.isNearPath(c.x, c.y));
-  // дополнительно фильтруем по дистанции до уже стоящих башен
-  const valid = validPath.filter(c => !window.isPosTooCloseToTowers(c.x, c.y, minDist));
-  let pool = valid.length ? valid : validPath;
-  if (!pool.length) pool = centers; // последний шанс — вообще любые центры
-  // попробуем до 40 случайных попыток найти свободную точку
-  for (let i=0; i<40; i++){
-    const pick = pool[Math.floor(Math.random() * pool.length)];
-    if (!window.isPosTooCloseToTowers(pick.x, pick.y, minDist)) return { x: pick.x, y: pick.y };
+  // Группируем центры по строкам Y
+  const rowYs = window.getGridRowYs(zone);
+  const rows = rowYs.map(y => ({ y, items: [] }));
+  for (const c of centers){
+    const idx = window.getNearestGridRowIndexForY(c.y, rowYs);
+    if (idx >= 0) rows[idx].items.push(c);
   }
-  // если не нашли свободную — вернём ближайшую к условию из пула
-  const fallback = pool.find(c => !window.isNearPath(c.x, c.y)) || pool[0];
-  return fallback ? { x: fallback.x, y: fallback.y } : null;
+  // Считаем занятость рядов текущими башнями
+  const occupancy = window.countTowersPerRow(rowYs);
+  // Ищем ряд(ы) с минимальной занятостью
+  let minOcc = Infinity; for (const v of occupancy) if (v < minOcc) minOcc = v;
+  const candidateRowIdxs = []; for (let i=0;i<occupancy.length;i++) if (occupancy[i]===minOcc) candidateRowIdxs.push(i);
+  // Выбираем один из наименее занятых рядов случайно
+  let chosenRowIdx = candidateRowIdxs.length ? candidateRowIdxs[Math.floor(Math.random()*candidateRowIdxs.length)] : 0;
+  let pool = rows[chosenRowIdx]?.items || centers;
+  // фильтруем по дороге и дистанции
+  let validPath = pool.filter(c => !window.isNearPath(c.x, c.y));
+  let valid = validPath.filter(c => !window.isPosTooCloseToTowers(c.x, c.y, minDist));
+  if (!valid.length){
+    // если в выбранном ряду не нашли, попробуем другие ряды, начиная с наименее занятых
+    const tryIdxs = candidateRowIdxs.concat([...Array(rowYs.length).keys()].filter(i=>!candidateRowIdxs.includes(i)));
+    for (const ridx of tryIdxs){
+      pool = rows[ridx]?.items || centers;
+      validPath = pool.filter(c => !window.isNearPath(c.x, c.y));
+      valid = validPath.filter(c => !window.isPosTooCloseToTowers(c.x, c.y, minDist));
+      if (valid.length) break;
+    }
+  }
+  const finalPool = (valid.length ? valid : (validPath.length ? validPath : centers));
+  if (!finalPool.length) return null;
+  const pick = finalPool[Math.floor(Math.random() * finalPool.length)];
+  return { x: pick.x, y: pick.y };
 };
 
 // Проверка, не слишком ли близко к уже стоящим башням

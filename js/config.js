@@ -27,6 +27,16 @@ window.SPAWN_RATE_INC_PER_TOWER = 0.002;
 // Верхний предел частоты спавна (safety cap)
 window.SPAWN_RATE_CAP = 1.0;
 
+// --- Эффект появления башни (impact_towers.png) ---
+// Спрайт содержит 7 кадров, общий размер 980x50 => кадр 140x50
+window.TOWER_IMPACT_ENABLED = true;         // включить анимацию вспышки при спавне башни
+window.TOWER_IMPACT_FRAMES = 7;             // количество кадров
+window.TOWER_IMPACT_FRAME_W = 140;          // ширина одного кадра
+window.TOWER_IMPACT_FRAME_H = 50;           // высота одного кадра
+window.TOWER_IMPACT_FRAME_DELAY = 4;        // задержка между кадрами (в кадрах игры)
+window.TOWER_IMPACT_SCALE = 1.0;            // масштаб эффекта
+window.TOWER_IMPACT_OFFSET_Y = 10;           // сдвиг по Y (положительный — ниже)
+
 // --- Зоны для спавна башен зрителей (по картинке) ---
 // [x1, y1, x2, y2] — координаты прямоугольников (всегда в "игровых" координатах 0..640, 0..480)
 window.ALLOWED_TOWER_ZONES = [
@@ -183,6 +193,17 @@ window.TOWER_FIRE_RATE = 45;                 // интервал между вы
 window.TOWER_SHOTS_LEFT = 50;                // количество выстрелов до исчезновения башни
 window.TOWER_SHOT_SOUND_EVERY_N = 3;         // играть звук каждого N-го выстрела
 window.TOWER_DRAW_SIZE = 52;                 // размер отрисовки башни (52x52)
+// Настройки текстов обычной башни (за лайки/аватар): киллкаунт и выстрелы
+window.TOWER_KC_FONT = 'bold 16px Arial';
+window.TOWER_KC_FILL = '#ffffff';
+window.TOWER_KC_STROKE = '#000000';
+window.TOWER_KC_LINE_WIDTH = 2;
+window.TOWER_KC_OFFSET_Y = -34;              // смещение по Y относительно центра башни
+window.TOWER_KC_ALPHA = 1.0;                 // прозрачность (0..1)
+window.TOWER_SHOTS_FONT = '10px Arial';
+window.TOWER_SHOTS_FILL = '#ffffff';
+window.TOWER_SHOTS_OFFSET_Y = 20;            // смещение по Y (ниже центра)
+window.TOWER_SHOTS_ALPHA = 1.0;
 // Стартовые киллы (HP башни против босса):
 // Базовая башня за лайки/аватар — 3; Подарочная L1 — 10; Подарочная L2 — 15
 window.TOWER_INITIAL_KILLS_BASIC = 3;        // для обычной (likes/аватар) башни
@@ -193,6 +214,29 @@ window.TOWER_INITIAL_KILLS_GIFT_L2 = 9;     // для подарочной ба�
 // window.TOWER_RANGE увеличивается до этого значения + запас
 window.AUTO_TOWER_RANGE_FROM_GRID = true;    // авто-расчёт радиуса по сетке/дороге
 window.TOWER_RANGE_MARGIN = 10;              // запас (в пикселях) поверх рассчитанного минимума
+
+// Настройки текстов башни-аватар (AvatarTower)
+window.AVATAR_KC_FONT = 'bold 15px Arial';
+window.AVATAR_KC_FILL = '#ffffff';
+window.AVATAR_KC_STROKE = '#000000';
+window.AVATAR_KC_LINE_WIDTH = 3;
+window.AVATAR_KC_OFFSET_Y = -12;             // относительно центра аватарки (радиус 15)
+window.AVATAR_KC_ALPHA = 1.0;
+window.AVATAR_SHOTS_FONT = '10px Arial';
+window.AVATAR_SHOTS_FILL = '#ffffff';
+window.AVATAR_SHOTS_OFFSET_Y = 17;
+window.AVATAR_SHOTS_ALPHA = 1.0;
+
+// Настройки текстов подарочных башен (GiftAvatarTower)
+window.GIFT_KC_FONT = 'bold 15px Arial';
+window.GIFT_KC_FILL = '#ffffff';
+window.GIFT_KC_STROKE = '#000000';
+window.GIFT_KC_LINE_WIDTH = 4;               // была толщина 4 при отрисовке
+window.GIFT_KC_ALPHA = 1.0;
+window.GIFT_SHOTS_FONT = '10px Arial';
+window.GIFT_SHOTS_FILL = '#ffffff';
+window.GIFT_SHOTS_OFFSET_Y = 1;              // от центра башни вниз
+window.GIFT_SHOTS_ALPHA = 1.0;
 
 // --- Настройки обычной пули (Bullet) ---
 window.BULLET_SPEED = 4;                     // скорость полёта пули

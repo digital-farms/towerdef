@@ -23,6 +23,8 @@
       this.dieFrameCounter = 0;
       this.dieFramesTotal = window.ENEMY_DIE_FRAMES_TOTAL;
     }
+
+
     update() {
       if (this.dying) {
         this.dieFrameCounter++;
@@ -70,6 +72,43 @@
     startDying() { if (this.dying) return; this.dying = true; this.dieFrame = 0; this.dieFrameCounter = 0; }
   }
 
+  // Эффект появления башни: вспышка у основания
+  class TowerSpawnImpact {
+    constructor(x, groundY){
+      this.x = x;
+      this.y = groundY + (Number(window.TOWER_IMPACT_OFFSET_Y) || 0);
+      this.frame = 0;
+      this.dead = false;
+      this.frameDelay = Number(window.TOWER_IMPACT_FRAME_DELAY) || 2;
+      this.counter = 0;
+      this.total = Number(window.TOWER_IMPACT_FRAMES) || 7;
+      this.fw = Number(window.TOWER_IMPACT_FRAME_W) || 140;
+      this.fh = Number(window.TOWER_IMPACT_FRAME_H) || 50;
+      this.scale = Number(window.TOWER_IMPACT_SCALE) || 1.0;
+    }
+    update(){
+      this.counter++;
+      if (this.counter >= this.frameDelay){
+        this.counter = 0;
+        this.frame++;
+        if (this.frame >= this.total) this.dead = true;
+      }
+    }
+    draw(){
+      const spr = window.impactTowersSprite;
+      if (!spr || !spr.complete || spr.width === 0) return;
+      const sx = Math.min(this.frame, this.total - 1) * this.fw;
+      const sy = 0;
+      const dw = this.fw * this.scale;
+      const dh = this.fh * this.scale;
+      // Привязка к низу: рисуем так, чтобы низ кадра лежал на y
+      const dx = this.x - dw/2;
+      const dy = this.y - dh;
+      const ctx = window.ctx;
+      ctx.drawImage(spr, sx, sy, this.fw, this.fh, dx, dy, dw, dh);
+    }
+  }
+
   class Tower {
     constructor(x, y) {
       this.x = x; this.y = y;
@@ -102,9 +141,28 @@
         const size = window.TOWER_DRAW_SIZE;
         ctx.fillRect(this.x - size/2, this.y - size/2, size, size); ctx.strokeRect(this.x - size/2, this.y - size/2, size, size); ctx.restore();
       }
-      ctx.save(); ctx.font = 'bold 16px Arial'; ctx.fillStyle = 'white'; ctx.strokeStyle = 'black'; ctx.lineWidth = 2; ctx.textAlign = 'center';
-      ctx.strokeText(this.killCount, this.x, this.y - 34); ctx.fillText(this.killCount, this.x, this.y - 34); ctx.restore();
-      ctx.save(); ctx.font = '10px Arial'; ctx.fillStyle = '#aaa'; ctx.textAlign = 'center'; ctx.fillText(this.shotsLeft, this.x, this.y + 28); ctx.restore();
+      // KillCount (configurable)
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = window.TOWER_KC_FONT || 'bold 16px Arial';
+      ctx.lineWidth = Number(window.TOWER_KC_LINE_WIDTH) || 2;
+      ctx.strokeStyle = window.TOWER_KC_STROKE || '#000';
+      ctx.fillStyle = window.TOWER_KC_FILL || '#fff';
+      const kcAlpha = (typeof window.TOWER_KC_ALPHA === 'number') ? window.TOWER_KC_ALPHA : 1.0;
+      const kcY = this.y + (typeof window.TOWER_KC_OFFSET_Y === 'number' ? window.TOWER_KC_OFFSET_Y : -34);
+      const prevAlpha1 = ctx.globalAlpha; ctx.globalAlpha = kcAlpha;
+      ctx.strokeText(this.killCount, this.x, kcY); ctx.fillText(this.killCount, this.x, kcY);
+      ctx.globalAlpha = prevAlpha1; ctx.restore();
+      // ShotsLeft (configurable)
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = window.TOWER_SHOTS_FONT || '10px Arial';
+      ctx.fillStyle = window.TOWER_SHOTS_FILL || '#ffffff';
+      const shAlpha = (typeof window.TOWER_SHOTS_ALPHA === 'number') ? window.TOWER_SHOTS_ALPHA : 1.0;
+      const shY = this.y + (typeof window.TOWER_SHOTS_OFFSET_Y === 'number' ? window.TOWER_SHOTS_OFFSET_Y : 20);
+      const prevAlpha2 = ctx.globalAlpha; ctx.globalAlpha = shAlpha;
+      ctx.fillText(this.shotsLeft, this.x, shY);
+      ctx.globalAlpha = prevAlpha2; ctx.restore();
     }
   }
 
@@ -118,9 +176,28 @@
         ctx.save(); ctx.beginPath(); ctx.arc(this.x, this.y, 15, 0, Math.PI*2); ctx.lineWidth = 6; ctx.strokeStyle = '#222'; ctx.stroke(); ctx.clip();
         ctx.drawImage(this.avatarImg, this.x - 26, this.y - 26, 52, 52); ctx.restore();
       } else { super.draw(); return; }
-      ctx.save(); ctx.font = 'bold 15px Arial'; ctx.fillStyle = 'white'; ctx.strokeStyle = 'black'; ctx.lineWidth = 2; ctx.textAlign = 'center';
-      ctx.strokeText(this.killCount, this.x, this.y - 12); ctx.fillText(this.killCount, this.x, this.y - 12); ctx.restore();
-      ctx.save(); ctx.font = '10px Arial'; ctx.fillStyle = '#aaa'; ctx.textAlign = 'center'; ctx.fillText(this.shotsLeft, this.x, this.y + 24); ctx.restore();
+      // KillCount (configurable)
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = window.AVATAR_KC_FONT || 'bold 15px Arial';
+      ctx.lineWidth = Number(window.AVATAR_KC_LINE_WIDTH) || 2;
+      ctx.strokeStyle = window.AVATAR_KC_STROKE || '#000';
+      ctx.fillStyle = window.AVATAR_KC_FILL || '#fff';
+      const kcAlpha = (typeof window.AVATAR_KC_ALPHA === 'number') ? window.AVATAR_KC_ALPHA : 1.0;
+      const kcY = this.y + (typeof window.AVATAR_KC_OFFSET_Y === 'number' ? window.AVATAR_KC_OFFSET_Y : -12);
+      const prevAlpha1 = ctx.globalAlpha; ctx.globalAlpha = kcAlpha;
+      ctx.strokeText(this.killCount, this.x, kcY); ctx.fillText(this.killCount, this.x, kcY);
+      ctx.globalAlpha = prevAlpha1; ctx.restore();
+      // ShotsLeft (configurable)
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = window.AVATAR_SHOTS_FONT || '10px Arial';
+      ctx.fillStyle = window.AVATAR_SHOTS_FILL || '#ffffff';
+      const shAlpha = (typeof window.AVATAR_SHOTS_ALPHA === 'number') ? window.AVATAR_SHOTS_ALPHA : 1.0;
+      const shY = this.y + (typeof window.AVATAR_SHOTS_OFFSET_Y === 'number' ? window.AVATAR_SHOTS_OFFSET_Y : 24);
+      const prevAlpha2 = ctx.globalAlpha; ctx.globalAlpha = shAlpha;
+      ctx.fillText(this.shotsLeft, this.x, shY);
+      ctx.globalAlpha = prevAlpha2; ctx.restore();
     }
   }
 
@@ -158,9 +235,28 @@
         ctx.save(); ctx.beginPath(); ctx.arc(ax, ay, R, 0, Math.PI*2); ctx.lineWidth = cfg.avatarStroke; ctx.strokeStyle = cfg.avatarStrokeColor || '#0000ff'; ctx.stroke(); ctx.clip();
         ctx.drawImage(this.avatarImg, ax - IW/2, ay - IW/2, IW, IW); ctx.restore();
       }
-      ctx.save(); ctx.font = 'bold 15px Arial'; ctx.lineWidth = 4; ctx.strokeStyle = 'black'; ctx.fillStyle = 'white'; ctx.textAlign = 'center';
-      const killY = this.y - th + cfg.killTextYOffset; ctx.strokeText(this.killCount || 0, this.x, killY); ctx.fillText(this.killCount || 0, this.x, killY); ctx.restore();
-      ctx.save(); ctx.font = '10px Arial'; ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.fillText(this.shotsLeft, this.x, this.y + 1); ctx.restore();
+      // KillCount (configurable for gift)
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = window.GIFT_KC_FONT || 'bold 15px Arial';
+      ctx.lineWidth = Number(window.GIFT_KC_LINE_WIDTH) || 4;
+      ctx.strokeStyle = window.GIFT_KC_STROKE || '#000';
+      ctx.fillStyle = window.GIFT_KC_FILL || '#fff';
+      const gkcAlpha = (typeof window.GIFT_KC_ALPHA === 'number') ? window.GIFT_KC_ALPHA : 1.0;
+      const killY = this.y - th + cfg.killTextYOffset;
+      const prevAlpha1 = ctx.globalAlpha; ctx.globalAlpha = gkcAlpha;
+      ctx.strokeText(this.killCount || 0, this.x, killY); ctx.fillText(this.killCount || 0, this.x, killY);
+      ctx.globalAlpha = prevAlpha1; ctx.restore();
+      // ShotsLeft (configurable for gift)
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.font = window.GIFT_SHOTS_FONT || '10px Arial';
+      ctx.fillStyle = window.GIFT_SHOTS_FILL || '#ffffff';
+      const gshAlpha = (typeof window.GIFT_SHOTS_ALPHA === 'number') ? window.GIFT_SHOTS_ALPHA : 1.0;
+      const shotsY = this.y + (typeof window.GIFT_SHOTS_OFFSET_Y === 'number' ? window.GIFT_SHOTS_OFFSET_Y : 1);
+      const prevAlpha2 = ctx.globalAlpha; ctx.globalAlpha = gshAlpha;
+      ctx.fillText(this.shotsLeft, this.x, shotsY);
+      ctx.globalAlpha = prevAlpha2; ctx.restore();
     }
   }
 
@@ -336,6 +432,7 @@
 
   // Export to window
   window.Enemy = Enemy;
+  window.TowerSpawnImpact = TowerSpawnImpact;
   window.Tower = Tower;
   window.AvatarTower = AvatarTower;
   window.GiftAvatarTower = GiftAvatarTower;

@@ -39,3 +39,7 @@ window.giftL1Img.src = 'gift_towers_assets/1lvl_gift_tower.png';
 // Спрайт башни за подарок 2 уровня
 window.giftL2Img = new Image();
 window.giftL2Img.src = 'gift_towers_assets/2lvl_gift_tower.png';
+
+// Эффект появления башни: вспышка у основания (7 кадров, общий размер 980x50)
+window.impactTowersSprite = new Image();
+window.impactTowersSprite.src = './impact_towers.png';
