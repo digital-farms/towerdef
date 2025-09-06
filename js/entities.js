@@ -131,12 +131,18 @@
       this.level = Number(level) || 1; const cfg = window.GIFT_TOWER_LEVELS[this.level] || window.GIFT_TOWER_LEVELS[1];
       this.shotsLeft = cfg.shotsLeft; this.fireRate = cfg.fireRate; this.range = cfg.range;
       // Стартовые киллы для подарочных башен по уровню
-      if (typeof cfg.initialKills === 'number') {
+      // Приоритет: глобальные значения из config.js (TOWER_INITIAL_KILLS_GIFT_L1/L2),
+      // затем per-level default (cfg.initialKills), затем 0.
+      const gL1 = Number(window.TOWER_INITIAL_KILLS_GIFT_L1);
+      const gL2 = Number(window.TOWER_INITIAL_KILLS_GIFT_L2);
+      if (this.level === 2 && Number.isFinite(gL2)) {
+        this.killCount = gL2;
+      } else if (this.level !== 2 && Number.isFinite(gL1)) {
+        this.killCount = gL1;
+      } else if (typeof cfg.initialKills === 'number') {
         this.killCount = cfg.initialKills;
-      } else if (this.level === 2) {
-        this.killCount = Number(window.TOWER_INITIAL_KILLS_GIFT_L2) || 0;
       } else {
-        this.killCount = Number(window.TOWER_INITIAL_KILLS_GIFT_L1) || 0;
+        this.killCount = 0;
       }
     }
     draw() {

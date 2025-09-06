@@ -20,7 +20,7 @@ let leaderboardData = [];
 //   TT_TOKEN       — Bearer-токен авторизации
 //   LIKES_MODE     — 'delta' (likes — приращение) или 'cumulative' (likes — суммарно)
 const STREAM_HOST = process.env.TT_SERVER_HOST || '100.70.128.72';
-const STREAMERS = (process.env.TT_STREAMERS || process.env.TT_STREAMER || '_sasha__shu_')
+const STREAMERS = (process.env.TT_STREAMERS || process.env.TT_STREAMER || 'alegasmr')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);

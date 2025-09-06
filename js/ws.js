@@ -12,20 +12,20 @@
         const pos = window.randomTowerPositionInAllowedZones();
         if (data.avatar) {
           const img = new Image(); img.crossOrigin = 'anonymous'; img.src = data.avatar;
-          img.onload = () => { window.towers.push(new window.AvatarTower(pos.x, pos.y, img, data.nickname, data.userId)); window.playSpawnTowerSound(); window.enemySpawnRate = Math.min(window.enemySpawnRate + 0.0015, 1); window.updateSpawnRateDisplay(); };
-          img.onerror = () => { window.towers.push(new window.Tower(pos.x, pos.y)); window.playSpawnTowerSound(); window.enemySpawnRate = Math.min(window.enemySpawnRate + 0.0015, 1); window.updateSpawnRateDisplay(); };
+          img.onload = () => { window.towers.push(new window.AvatarTower(pos.x, pos.y, img, data.nickname, data.userId)); window.playSpawnTowerSound(); window.enemySpawnRate = Math.min(window.enemySpawnRate + (window.SPAWN_RATE_INC_PER_TOWER||0.0015), window.SPAWN_RATE_CAP||1); window.updateSpawnRateDisplay(); };
+          img.onerror = () => { window.towers.push(new window.Tower(pos.x, pos.y)); window.playSpawnTowerSound(); window.enemySpawnRate = Math.min(window.enemySpawnRate + (window.SPAWN_RATE_INC_PER_TOWER||0.0015), window.SPAWN_RATE_CAP||1); window.updateSpawnRateDisplay(); };
         } else {
-          window.towers.push(new window.Tower(pos.x, pos.y)); window.playSpawnTowerSound(); window.enemySpawnRate = Math.min(window.enemySpawnRate + 0.0015, 1); window.updateSpawnRateDisplay();
+          window.towers.push(new window.Tower(pos.x, pos.y)); window.playSpawnTowerSound(); window.enemySpawnRate = Math.min(window.enemySpawnRate + (window.SPAWN_RATE_INC_PER_TOWER||0.0015), window.SPAWN_RATE_CAP||1); window.updateSpawnRateDisplay();
         }
       } else if (data.type === 'newGiftTower') {
         if (window.gameState !== 'running') return;
         const pos = window.randomTowerPositionInAllowedZones(); const lvl = Number(data.level || 1);
         if (data.avatar) {
           const img = new Image(); img.crossOrigin = 'anonymous'; img.src = data.avatar;
-          img.onload = () => { window.towers.push(new window.GiftAvatarTower(pos.x, pos.y, img, data.nickname, data.userId, lvl)); window.playSpawnTowerSound(); window.enemySpawnRate = Math.min(window.enemySpawnRate + 0.0015, 1); window.updateSpawnRateDisplay(); };
-          img.onerror = () => { window.towers.push(new window.GiftAvatarTower(pos.x, pos.y, null, data.nickname, data.userId, lvl)); window.playSpawnTowerSound(); window.enemySpawnRate = Math.min(window.enemySpawnRate + 0.0015, 1); window.updateSpawnRateDisplay(); };
+          img.onload = () => { window.towers.push(new window.GiftAvatarTower(pos.x, pos.y, img, data.nickname, data.userId, lvl)); window.playSpawnTowerSound(); window.enemySpawnRate = Math.min(window.enemySpawnRate + (window.SPAWN_RATE_INC_PER_TOWER||0.0015), window.SPAWN_RATE_CAP||1); window.updateSpawnRateDisplay(); };
+          img.onerror = () => { window.towers.push(new window.GiftAvatarTower(pos.x, pos.y, null, data.nickname, data.userId, lvl)); window.playSpawnTowerSound(); window.enemySpawnRate = Math.min(window.enemySpawnRate + (window.SPAWN_RATE_INC_PER_TOWER||0.0015), window.SPAWN_RATE_CAP||1); window.updateSpawnRateDisplay(); };
         } else {
-          window.towers.push(new window.GiftAvatarTower(pos.x, pos.y, null, data.nickname, data.userId, lvl)); window.playSpawnTowerSound(); window.enemySpawnRate = Math.min(window.enemySpawnRate + 0.0015, 1); window.updateSpawnRateDisplay();
+          window.towers.push(new window.GiftAvatarTower(pos.x, pos.y, null, data.nickname, data.userId, lvl)); window.playSpawnTowerSound(); window.enemySpawnRate = Math.min(window.enemySpawnRate + (window.SPAWN_RATE_INC_PER_TOWER||0.0015), window.SPAWN_RATE_CAP||1); window.updateSpawnRateDisplay();
         }
       } else if (data.type === 'extLog') {
         if (data.level === 'raw') {
