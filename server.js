@@ -16,10 +16,21 @@ let leaderboardData = [];
 // Настраивается через переменные окружения:
 //   TT_SERVER_HOST — домен сервера (по умолчанию tiktokliveserver.org)
 //   TT_STREAMER    — ник стримера (например, enfor.cross)
+//   TT_STREAMERS   — список ников через запятую для рандомного выбора (например: user1,user2,user3)
 //   TT_TOKEN       — Bearer-токен авторизации
 //   LIKES_MODE     — 'delta' (likes — приращение) или 'cumulative' (likes — суммарно)
 const STREAM_HOST = process.env.TT_SERVER_HOST || '100.70.128.72';
-const STREAMER = process.env.TT_STREAMER || 'kaerukun_asmr';
+const STREAMERS = (process.env.TT_STREAMERS || process.env.TT_STREAMER || '_sasha__shu_')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+const STREAMER_MODE = (process.env.TT_STREAMER_MODE || (STREAMERS.length > 1 ? 'random' : 'fixed')).toLowerCase();
+function pickStreamer(){
+  if (!STREAMERS.length) return 'girl_asmrrrr';
+  if (STREAMER_MODE === 'random') return STREAMERS[Math.floor(Math.random() * STREAMERS.length)];
+  return STREAMERS[0];
+}
+let CURRENT_STREAMER = pickStreamer();
 const TOKEN = process.env.TT_TOKEN || '3debd82ada04ab756d750d3c7d8295e4ad958e440ba7fd7135e31bba370c1a8d777862c62b3e45fe570640e5c54de641b7c89a7c82732a9489fd156c50f6cec8';
 const LIKES_MODE = (process.env.LIKES_MODE || 'delta').toLowerCase();
 
@@ -42,12 +53,12 @@ function logSrc(msg) {
 }
 
 // Подготовка прослушивания стрима через HTTP ("пробуждение" канала)
-function startListenHTTP() {
+function startListenHTTP(streamerName) {
   return new Promise((resolve) => {
     const options = {
       hostname: STREAM_HOST,
       port: 8001,
-      path: `/listen/${encodeURIComponent(STREAMER)}`,
+      path: `/listen/${encodeURIComponent(streamerName)}`,
       method: 'POST',
       headers: TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {},
     };
@@ -69,18 +80,25 @@ function startListenHTTP() {
 
 // Подключение к WebSocket источнику
 let extWS = null;
-function connectExternalWS() {
+function connectExternalWS(streamerName) {
   const url = `ws://${STREAM_HOST}:8001/ws`;
   const wsOptions = TOKEN ? { headers: { Authorization: `Bearer ${TOKEN}` } } : {};
-  logSrc(`Подключаюсь к ${url} (streamer=${STREAMER}, mode=${LIKES_MODE})`);
+  logSrc(`Подключаюсь к ${url} (streamer=${streamerName}, mode=${LIKES_MODE}, pick=${STREAMER_MODE})`);
   extWS = new WebSocket(url, wsOptions);
 
   extWS.on('open', () => logSrc('✅ WS connected'));
 
   extWS.on('close', (code, reason) => {
     logSrc(`WS closed: ${code} ${reason || ''}`);
-    // Реконнект через 3 сек.
-    setTimeout(connectExternalWS, 3000);
+    // Перевыбор стримера при режиме random и реконнект
+    if (STREAMER_MODE === 'random') {
+      CURRENT_STREAMER = pickStreamer();
+      logSrc(`Рандомный выбор нового стримера: ${CURRENT_STREAMER}`);
+    }
+    // Перед реконнектом "пробуждаем" канал на нового стримера
+    startListenHTTP(CURRENT_STREAMER).finally(() => {
+      setTimeout(() => connectExternalWS(CURRENT_STREAMER), 3000);
+    });
   });
 
   extWS.on('error', (err) => {
@@ -224,6 +242,7 @@ server.listen(8080, async () => {
   if (!TOKEN) {
     logSrc('ВНИМАНИЕ: TT_TOKEN не задан — авторизация на внешнем сервере может не пройти.');
   }
-  await startListenHTTP();
-  connectExternalWS();
+  logSrc(`Инициализация прослушивания. Выбран стример: ${CURRENT_STREAMER} (режим выбора: ${STREAMER_MODE}; список: ${STREAMERS.join(', ')})`);
+  await startListenHTTP(CURRENT_STREAMER);
+  connectExternalWS(CURRENT_STREAMER);
 });

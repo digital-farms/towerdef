@@ -7,11 +7,38 @@ window.drawBase = function() {
   ctx.restore();
 };
 
+function drawSpawnGrid(){
+  if (!window.SHOW_SPAWN_GRID) return;
+  const zone = window.ALLOWED_TOWER_ZONES && window.ALLOWED_TOWER_ZONES[0];
+  if (!zone) return;
+  const [x1,y1,x2,y2] = zone;
+  const cell = window.getGridCellSize ? window.getGridCellSize() : 0;
+  const pad = (typeof window.GRID_SPAWN_BORDER_OFFSET === 'number') ? window.GRID_SPAWN_BORDER_OFFSET : 8;
+  const cx1 = x1 + pad, cy1 = y1 + pad, cx2 = x2 - pad, cy2 = y2 - pad;
+  const mode = window.GRID_DRAW_MODE || 'centers';
+  const color = window.GRID_COLOR || 'rgba(0,255,255,0.6)';
+  const ctx = window.ctx;
+  ctx.save();
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = window.GRID_LINE_WIDTH || 1;
+  if (mode === 'cells' && cell > 2){
+    for (let y = cy1; y <= cy2 - 0.5; y += cell){
+      for (let x = cx1; x <= cx2 - 0.5; x += cell){
+        ctx.strokeRect(x, y, Math.min(cell, cx2 - x), Math.min(cell, cy2 - y));
+      }
+    }
+  } else {
+    // draw centers
+    const centers = (window.computeGridCenters ? window.computeGridCenters(zone) : []).slice(0, 5000);
+    const r = window.GRID_CENTER_RADIUS || 2;
+    for (const c of centers){ ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI*2); ctx.fill(); }
+  }
+  ctx.restore();
+}
+
 window.resizeCanvas = function() {
   const canvas = window.canvas; const aspect = 640 / 480; let w = window.innerWidth; let h = window.innerHeight; if (w / h > aspect) { w = h * aspect; } else { h = w / aspect; }
   canvas.width = w; canvas.height = h; canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
 };
-window.addEventListener('resize', window.resizeCanvas);
 window.resizeCanvas();
 
 window.drawGameOverOverlay = function() {

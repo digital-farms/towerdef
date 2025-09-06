@@ -45,6 +45,7 @@
       for (const b of window.bullets) b.update();
     }
     window.drawBase();
+    if (typeof drawSpawnGrid === 'function') drawSpawnGrid();
     const backTowers=[], frontTowers=[];
     for (const t of window.towers){ const gy=window.getTowerGroundY(t); const cy=window.getClosestPathY(t.x, gy); if (cy==null || gy <= cy + window.FRONT_Y_EPS) backTowers.push(t); else frontTowers.push(t); }
     for (const t of backTowers) t.draw();

@@ -74,7 +74,9 @@
     constructor(x, y) {
       this.x = x; this.y = y;
       this.range = window.TOWER_RANGE; this.fireRate = window.TOWER_FIRE_RATE; this.cooldown = 0;
-      this.killCount = 0; this.shotsLeft = window.TOWER_SHOTS_LEFT; this.shotCounter = 0; this.shotSoundEveryN = window.TOWER_SHOT_SOUND_EVERY_N; this.dead = false;
+      // Стартовые киллы для базовой (лайк/аватар) башни
+      this.killCount = Number(window.TOWER_INITIAL_KILLS_BASIC) || 0;
+      this.shotsLeft = window.TOWER_SHOTS_LEFT; this.shotCounter = 0; this.shotSoundEveryN = window.TOWER_SHOT_SOUND_EVERY_N; this.dead = false;
     }
     update() {
       if (this.cooldown > 0) { this.cooldown--; return; }
@@ -128,6 +130,14 @@
       this.avatarImg = avatarImg; this.nickname = nickname || userId || 'anon'; this.userId = userId || null;
       this.level = Number(level) || 1; const cfg = window.GIFT_TOWER_LEVELS[this.level] || window.GIFT_TOWER_LEVELS[1];
       this.shotsLeft = cfg.shotsLeft; this.fireRate = cfg.fireRate; this.range = cfg.range;
+      // Стартовые киллы для подарочных башен по уровню
+      if (typeof cfg.initialKills === 'number') {
+        this.killCount = cfg.initialKills;
+      } else if (this.level === 2) {
+        this.killCount = Number(window.TOWER_INITIAL_KILLS_GIFT_L2) || 0;
+      } else {
+        this.killCount = Number(window.TOWER_INITIAL_KILLS_GIFT_L1) || 0;
+      }
     }
     draw() {
       const cfg = window.GIFT_TOWER_LEVELS[this.level] || window.GIFT_TOWER_LEVELS[1];
@@ -281,6 +291,8 @@
     shootAt(t){ window.bullets.push(new window.BossBullet(this.x, this.y, t)); }
     onReachBase(){ window.base.hp -= (window.BOSS_BASE_DAMAGE||100); this.dead = true; }
     draw(){
+      const scale = window.BOSS_VISUAL_SCALE || 1;
+      const yOff = window.BOSS_SIZE_OFFSET_Y || 0;
       // Если идёт анимация смерти — рисуем спрайт смерти босса
       if (this.dying){
         const dieSpr = window.bossDieSprite;
@@ -290,13 +302,29 @@
           const fh = dieSpr.height;
           const sx = Math.min(this.dieFrame, total-1) * fw;
           const sy = 0;
-          ctx.drawImage(dieSpr, sx, sy, fw, fh, this.x - fw/2, this.y - fh, fw, fh);
+          const dw = fw * scale;
+          const dh = fh * scale;
+          ctx.drawImage(dieSpr, sx, sy, fw, fh, this.x - dw/2, this.y - dh + yOff, dw, dh);
         }
         return;
       }
-      const spr=window.boss3Sprite; if(spr && spr.complete){ ctx.drawImage(spr, this.frame*this.frameWidth, 0, this.frameWidth, this.frameHeight, this.x - this.frameWidth/2, this.y - this.frameHeight, this.frameWidth, this.frameHeight); } else { ctx.save(); ctx.fillStyle='rgba(0,255,0,0.6)'; ctx.fillRect(this.x-30,this.y-60,60,60); ctx.restore(); }
-      // HP bar
-      ctx.save(); ctx.fillStyle='#222'; ctx.fillRect(this.x-25, this.y - this.frameHeight - 12, 50, 8); ctx.fillStyle='#0f0'; ctx.fillRect(this.x-25, this.y - this.frameHeight - 12, 50*(this.hp/this.maxHp), 8); ctx.strokeStyle='#000'; ctx.strokeRect(this.x-25, this.y - this.frameHeight - 12, 50, 8); ctx.restore();
+      const spr=window.boss3Sprite;
+      if(spr && spr.complete){
+        const dw = this.frameWidth * scale;
+        const dh = this.frameHeight * scale;
+        ctx.drawImage(spr, this.frame*this.frameWidth, 0, this.frameWidth, this.frameHeight, this.x - dw/2, this.y - dh + yOff, dw, dh);
+      } else {
+        ctx.save(); ctx.fillStyle='rgba(0,255,0,0.6)';
+        const dw = 60 * scale, dh = 60 * scale;
+        ctx.fillRect(this.x-dw/2, this.y-dh + yOff, dw, dh); ctx.restore();
+      }
+      // HP bar (позиция учитывает масштаб и смещение)
+      ctx.save();
+      const barY = this.y - (this.frameHeight * scale) + yOff - 12;
+      ctx.fillStyle='#222'; ctx.fillRect(this.x-25, barY, 50, 8);
+      ctx.fillStyle='#0f0'; ctx.fillRect(this.x-25, barY, 50*(this.hp/this.maxHp), 8);
+      ctx.strokeStyle='#000'; ctx.strokeRect(this.x-25, barY, 50, 8);
+      ctx.restore();
     }
   }
 
