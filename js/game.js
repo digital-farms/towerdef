@@ -4,12 +4,14 @@
   // Коллекция визуальных эффектов (например, вспышка при появлении башни)
   window.effects = window.effects || [];
   window.updateSpawnRateDisplay = function(){
-    document.getElementById('spawnRateDisplay').textContent = window.enemySpawnRate.toFixed(3);
-    document.getElementById('spawnRateCorner').textContent = `rate: ${window.enemySpawnRate.toFixed(3)}`;
+    const a = document.getElementById('spawnRateDisplay');
+    if (a) a.textContent = window.enemySpawnRate.toFixed(3);
+    const b = document.getElementById('spawnRateCorner');
+    if (b) b.textContent = `rate: ${window.enemySpawnRate.toFixed(3)}`;
   };
 
   window.softResetToWaiting = function(){
-    window.enemies.length = 0; window.bullets.length = 0; window.towers.length = 0; window.enemySpawnRate = 0.004; window.updateSpawnRateDisplay();
+    window.enemies.length = 0; window.bullets.length = 0; window.towers.length = 0; window.enemySpawnRate = (window.ENEMY_SPAWN_RATE_INITIAL || 0.004); window.updateSpawnRateDisplay();
   };
 
   window.startGameRun = function(){
@@ -75,7 +77,7 @@
     if (window.gameState === 'running'){
       for (let i=window.enemies.length-1;i>=0;i--) if (window.enemies[i].dead) window.enemies.splice(i,1);
       for (let i=window.bullets.length-1;i>=0;i--) if (window.bullets[i].dead) window.bullets.splice(i,1);
-      for (let i=window.towers.length-1;i>=0;i--) if (window.towers[i].dead){ window.enemySpawnRate = Math.max(0, window.enemySpawnRate - 0.0015); window.updateSpawnRateDisplay(); window.towers.splice(i,1); }
+      for (let i=window.towers.length-1;i>=0;i--) if (window.towers[i].dead){ window.enemySpawnRate = Math.max(0, window.enemySpawnRate - (window.SPAWN_RATE_DEC_ON_TOWER_DEATH||0.0015)); window.updateSpawnRateDisplay(); window.towers.splice(i,1); }
       for (let i=window.effects.length-1;i>=0;i--) if (window.effects[i].dead) window.effects.splice(i,1);
     }
 
@@ -103,8 +105,9 @@
     window.enemySpawnRate = Math.min(window.enemySpawnRate + inc, cap); window.updateSpawnRateDisplay();
   });
 
-  document.getElementById('spawnPlus').onclick = () => { window.enemySpawnRate = Math.min(window.enemySpawnRate + 0.003, 1); window.updateSpawnRateDisplay(); };
+  const spawnPlusBtn = document.getElementById('spawnPlus');
+  if (spawnPlusBtn) spawnPlusBtn.onclick = () => { const step=(window.SPAWN_RATE_MANUAL_STEP||0.003), cap=(window.SPAWN_RATE_CAP||1); window.enemySpawnRate = Math.min(window.enemySpawnRate + step, cap); window.updateSpawnRateDisplay(); };
   window.updateSpawnRateDisplay();
 
-  window.bgImage.onload = () => { window.gameLoop(); };
+  window.bgImage.onload = async () => { try { if (window.loadLiveConfigPromise) await window.loadLiveConfigPromise; } catch {} window.gameLoop(); };
 })();

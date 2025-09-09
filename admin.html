@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Админ панель — TowerDef</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:#0f172a;
+      --panel:#111827;
+      --card:#1f2937;
+      --text:#e5e7eb;
+      --muted:#94a3b8;
+      --accent:#22c55e;
+      --danger:#ef4444;
+      --border:#334155;
+    }
+    html,body { height:100%; }
+    body { margin:0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial; background:var(--bg); color:var(--text); }
+    .container { max-width: 920px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 22px; margin: 0 0 12px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .panel { background: var(--panel); border:1px solid var(--border); border-radius:12px; padding: 16px; margin-top: 16px; }
+    .row { display:flex; gap:16px; flex-wrap:wrap; }
+    .card { flex:1 1 280px; background: var(--card); border:1px solid var(--border); border-radius: 10px; padding: 14px; }
+    .card h2 { font-size: 16px; margin: 0 0 10px; }
+    label { display:block; font-size: 13px; color: var(--muted); margin: 8px 0 6px; }
+    input[type="text"], select, textarea { width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:#0b1220; color:var(--text); outline:none; }
+    textarea { min-height: 92px; resize: vertical; }
+    .actions { display:flex; gap:10px; margin-top: 12px; }
+    button { padding:10px 14px; border-radius:10px; border:1px solid transparent; cursor:pointer; font-weight:600; }
+    .btn { background:#0b1220; color:var(--text); border-color: var(--border); }
+    .btn:hover { background:#0f172a; }
+    .primary { background: var(--accent); color:#04110a; }
+    .primary:hover { filter: brightness(0.95); }
+    .danger { background: var(--danger); color:#fff; }
+    .danger:hover { filter: brightness(0.95); }
+    .inline { display:flex; gap:8px; align-items:center; }
+    .footer { display:flex; justify-content: space-between; align-items:center; margin-top: 12px; }
+    .pill { padding: 6px 10px; background:#0b1220; border:1px solid var(--border); border-radius: 999px; font-size: 12px; color: var(--muted); }
+    .toast { position:fixed; right:16px; bottom:16px; background:#111827; border:1px solid var(--border); color:var(--text); padding:10px 14px; border-radius:10px; opacity:0; transform: translateY(10px); transition: all .25s ease; }
+    .toast.show { opacity:1; transform: translateY(0); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Админ панель</h1>
+    <div class="muted">Редактируйте настройки и применяйте без правки кода. Публичные параметры хранятся в <code>live.config.json</code>.</div>
+
+    <div class="panel">
+      <div class="row">
+        <div class="card">
+          <h2>Live-сервер</h2>
+          <label>STREAM_HOST</label>
+          <input id="host" type="text" placeholder="например, 100.70.128.72">
+
+          <label>STREAMERS (через запятую)</label>
+          <input id="streamers" type="text" placeholder="user1, user2">
+
+          <div class="row">
+            <div class="card" style="flex:1 1 180px;">
+              <h2>Режимы</h2>
+              <label>STREAMER_MODE</label>
+              <select id="streamer_mode">
+                <option value="fixed">fixed</option>
+                <option value="random">random</option>
+              </select>
+
+              <label>LIKES_MODE</label>
+              <select id="likes_mode">
+                <option value="delta">delta</option>
+                <option value="cumulative">cumulative</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button class="primary" id="save">Сохранить</button>
+            <button class="btn" id="reload">Применить без рестарта</button>
+            <button class="danger" id="restart">Перезапустить сервер</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Геймплей: спавн/баланс</h2>
+          <div class="row">
+            <div class="card" style="flex:1 1 260px;">
+              <label>ENEMY_SPAWN_RATE_INITIAL</label>
+              <input id="ENEMY_SPAWN_RATE_INITIAL" type="text" placeholder="0.004">
+              <label>SPAWN_RATE_INC_PER_TOWER</label>
+              <input id="SPAWN_RATE_INC_PER_TOWER" type="text" placeholder="0.002">
+              <label>SPAWN_RATE_DEC_ON_TOWER_DEATH</label>
+              <input id="SPAWN_RATE_DEC_ON_TOWER_DEATH" type="text" placeholder="0.0015">
+              <label>SPAWN_RATE_CAP</label>
+              <input id="SPAWN_RATE_CAP" type="text" placeholder="1.0">
+              <label>SPAWN_RATE_MANUAL_STEP</label>
+              <input id="SPAWN_RATE_MANUAL_STEP" type="text" placeholder="0.003">
+              <label>ENEMY_DENSITY_SCALE</label>
+              <input id="ENEMY_DENSITY_SCALE" type="text" placeholder="0.33">
+            </div>
+            <div class="card" style="flex:1 1 260px;">
+              <h2>Сетка / коллизии</h2>
+              <label class="inline"><input id="GRID_SPAWN_ENABLED" type="checkbox"> <span>GRID_SPAWN_ENABLED</span></label>
+              <label>GRID_SPAWN_CELL_K</label>
+              <input id="GRID_SPAWN_CELL_K" type="text" placeholder="1.25">
+              <label>GRID_OFFSET_X</label>
+              <input id="GRID_OFFSET_X" type="text" placeholder="-20">
+              <label>GRID_OFFSET_Y</label>
+              <input id="GRID_OFFSET_Y" type="text" placeholder="-20">
+              <label>PATH_FORBIDDEN_RADIUS</label>
+              <input id="PATH_FORBIDDEN_RADIUS" type="text" placeholder="44">
+              <label>TOWER_MIN_DISTANCE</label>
+              <input id="TOWER_MIN_DISTANCE" type="text" placeholder="32">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Башни</h2>
+          <div class="row">
+            <div class="card" style="flex:1 1 260px;">
+              <label>TOWER_RANGE</label>
+              <input id="TOWER_RANGE" type="text" placeholder="100">
+              <label>TOWER_FIRE_RATE</label>
+              <input id="TOWER_FIRE_RATE" type="text" placeholder="45">
+              <label>TOWER_SHOTS_LEFT</label>
+              <input id="TOWER_SHOTS_LEFT" type="text" placeholder="50">
+              <label>TOWER_DRAW_SIZE</label>
+              <input id="TOWER_DRAW_SIZE" type="text" placeholder="52">
+            </div>
+            <div class="card" style="flex:1 1 260px;">
+              <label>TOWER_INITIAL_KILLS_BASIC</label>
+              <input id="TOWER_INITIAL_KILLS_BASIC" type="text" placeholder="3">
+              <label>TOWER_INITIAL_KILLS_GIFT_L1</label>
+              <input id="TOWER_INITIAL_KILLS_GIFT_L1" type="text" placeholder="6">
+              <label>TOWER_INITIAL_KILLS_GIFT_L2</label>
+              <input id="TOWER_INITIAL_KILLS_GIFT_L2" type="text" placeholder="9">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Босс</h2>
+          <div class="row">
+            <div class="card" style="flex:1 1 260px;">
+              <label>BOSS_HP</label><input id="BOSS_HP" type="text" placeholder="60">
+              <label>BOSS_SPEED</label><input id="BOSS_SPEED" type="text" placeholder="0.16">
+              <label>BOSS_FIRE_RATE</label><input id="BOSS_FIRE_RATE" type="text" placeholder="300">
+              <label>BOSS_BASE_DAMAGE</label><input id="BOSS_BASE_DAMAGE" type="text" placeholder="30">
+            </div>
+            <div class="card" style="flex:1 1 260px;">
+              <label>BOSS_VISUAL_SCALE</label><input id="BOSS_VISUAL_SCALE" type="text" placeholder="1.4">
+              <label>BOSS_SIZE_OFFSET_Y</label><input id="BOSS_SIZE_OFFSET_Y" type="text" placeholder="0">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Голем</h2>
+          <div class="row">
+            <div class="card" style="flex:1 1 260px;">
+              <label>GOLEM_HP</label><input id="GOLEM_HP" type="text" placeholder="40">
+              <label>GOLEM_SPEED</label><input id="GOLEM_SPEED" type="text" placeholder="0.4">
+              <label>GOLEM_FIRE_RATE</label><input id="GOLEM_FIRE_RATE" type="text" placeholder="100">
+              <label>GOLEM_BASE_DAMAGE</label><input id="GOLEM_BASE_DAMAGE" type="text" placeholder="20">
+            </div>
+            <div class="card" style="flex:1 1 260px;">
+              <label>GOLEM_VISUAL_SCALE</label><input id="GOLEM_VISUAL_SCALE" type="text" placeholder="1.4">
+              <label>GOLEM_SIZE_OFFSET_Y</label><input id="GOLEM_SIZE_OFFSET_Y" type="text" placeholder="40">
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Расширенный JSON</h2>
+          <label>live.config.json</label>
+          <textarea id="raw" spellcheck="false"></textarea>
+          <div class="actions">
+            <button class="btn" id="format">Форматировать</button>
+            <button class="primary" id="saveRaw">Сохранить JSON</button>
+          </div>
+          <div class="muted" style="margin-top:6px;">Секреты (TOKEN) не храним здесь. Для этого используйте <code>server.config.js</code> или переменные окружения.</div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div class="pill" id="status">Статус: —</div>
+        <div class="muted">После рестарта страница переподключится автоматически.</div>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+  <script src="./admin.js"></script>
+</body>
+</html>

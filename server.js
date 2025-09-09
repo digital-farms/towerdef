@@ -3,8 +3,11 @@ const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
+app.use(express.json());
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
@@ -12,27 +15,32 @@ const likeCounts = {};
 const sentTowersCount = {};
 let leaderboardData = [];
 
-// Конфигурация внешнего сервера лайв-событий
-// Настраивается через переменные окружения:
-//   TT_SERVER_HOST — домен сервера (по умолчанию tiktokliveserver.org)
-//   TT_STREAMER    — ник стримера (например, enfor.cross)
-//   TT_STREAMERS   — список ников через запятую для рандомного выбора (например: user1,user2,user3)
-//   TT_TOKEN       — Bearer-токен авторизации
-//   LIKES_MODE     — 'delta' (likes — приращение) или 'cumulative' (likes — суммарно)
-const STREAM_HOST = process.env.TT_SERVER_HOST || '100.70.128.72';
-const STREAMERS = (process.env.TT_STREAMERS || process.env.TT_STREAMER || 'graceh.asmr')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
-const STREAMER_MODE = (process.env.TT_STREAMER_MODE || (STREAMERS.length > 1 ? 'random' : 'fixed')).toLowerCase();
+// --- ADMIN: config storage (public, non-secret) ---
+const LIVE_CONFIG_PATH = path.join(__dirname, 'live.config.json');
+
+function readLiveConfig(){
+  try { return JSON.parse(fs.readFileSync(LIVE_CONFIG_PATH, 'utf8')); }
+  catch { return {}; }
+}
+function writeLiveConfig(cfg){ fs.writeFileSync(LIVE_CONFIG_PATH, JSON.stringify(cfg, null, 2), 'utf8'); }
+
+// Конфигурация внешнего сервера лайв-событий с приоритетом ENV > live.config.json > дефолты
+const liveCfg = readLiveConfig();
+let secrets = {}; try { secrets = require('./server.config.js'); } catch {}
+
+const STREAM_HOST = process.env.TT_SERVER_HOST || liveCfg.STREAM_HOST || '100.70.128.72';
+const STREAMERS = (
+  process.env.TT_STREAMERS || process.env.TT_STREAMER || (Array.isArray(liveCfg.STREAMERS) ? liveCfg.STREAMERS.join(',') : (liveCfg.STREAMERS || 'j.chatae'))
+).toString().split(',').map(s=>s.trim()).filter(Boolean);
+const STREAMER_MODE = (process.env.TT_STREAMER_MODE || liveCfg.STREAMER_MODE || (STREAMERS.length > 1 ? 'random' : 'fixed')).toLowerCase();
 function pickStreamer(){
   if (!STREAMERS.length) return 'girl_asmrrrr';
   if (STREAMER_MODE === 'random') return STREAMERS[Math.floor(Math.random() * STREAMERS.length)];
   return STREAMERS[0];
 }
 let CURRENT_STREAMER = pickStreamer();
-const TOKEN = process.env.TT_TOKEN || '3debd82ada04ab756d750d3c7d8295e4ad958e440ba7fd7135e31bba370c1a8d777862c62b3e45fe570640e5c54de641b7c89a7c82732a9489fd156c50f6cec8';
-const LIKES_MODE = (process.env.LIKES_MODE || 'delta').toLowerCase();
+const TOKEN = process.env.TT_TOKEN || secrets.TOKEN || 'YOUR_LOCAL_DEV_TOKEN';
+const LIKES_MODE = (process.env.LIKES_MODE || liveCfg.LIKES_MODE || 'delta').toLowerCase();
 
 // Раздаём всю папку towerdef как статику
 app.use(express.static(__dirname));
@@ -40,6 +48,51 @@ app.use(express.static(__dirname));
 // По корню отдаём index.html (чтобы http://localhost:8080/ сразу открывал игру)
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/index.html');
+});
+
+// Удобный алиас для панели админа
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'admin.html'));
+});
+
+// GET current live (public) config
+app.get('/admin/live-config', (req, res) => {
+  const cfg = readLiveConfig();
+  // Вернём ПОЛНЫЙ конфиг, подставив дефолты только для STREAM_* и LIKES_MODE, если отсутствуют
+  const merged = {
+    ...cfg,
+    STREAM_HOST: cfg.STREAM_HOST ?? STREAM_HOST,
+    STREAMERS: cfg.STREAMERS ?? STREAMERS,
+    STREAMER_MODE: cfg.STREAMER_MODE ?? STREAMER_MODE,
+    LIKES_MODE: cfg.LIKES_MODE ?? LIKES_MODE
+  };
+  res.json(merged);
+});
+
+// POST updated live (public) config
+app.post('/admin/live-config', (req, res) => {
+  try {
+    const cfg = req.body || {};
+    if (!cfg || typeof cfg !== 'object') return res.status(400).json({ error: 'Invalid JSON' });
+    // basic sanitize
+    cfg.STREAMERS = Array.isArray(cfg.STREAMERS) ? cfg.STREAMERS.map(s=>String(s).trim()).filter(Boolean) : [];
+    cfg.STREAM_HOST = String(cfg.STREAM_HOST || '').trim() || STREAM_HOST;
+    cfg.STREAMER_MODE = String(cfg.STREAMER_MODE || 'fixed').toLowerCase();
+    cfg.LIKES_MODE = String(cfg.LIKES_MODE || 'delta').toLowerCase();
+    writeLiveConfig(cfg);
+    // после сохранения — жёсткий рестарт
+    res.json({ ok: true, restarting: true });
+    setTimeout(()=>process.exit(0), 100);
+  } catch (e) {
+    console.error('POST /admin/live-config error', e);
+    res.status(500).json({ error: 'write_failed' });
+  }
+});
+
+// Hard restart (expects supervisor like nodemon/pm2)
+app.post('/admin/restart', (req, res) => {
+  res.json({ ok: true, restarting: true });
+  setTimeout(() => process.exit(0), 100);
 });
 
 // --- LEADERBOARD API ---

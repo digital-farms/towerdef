@@ -26,6 +26,12 @@ window.RESTART_LIKES_TARGET = 50;
 window.SPAWN_RATE_INC_PER_TOWER = 0.002;
 // Верхний предел частоты спавна (safety cap)
 window.SPAWN_RATE_CAP = 1.0;
+// Базовое значение рейтa спавна при старте/ресете
+window.ENEMY_SPAWN_RATE_INITIAL = 0.004;
+// Насколько уменьшать rate при смерти башни
+window.SPAWN_RATE_DEC_ON_TOWER_DEATH = 0.0015;
+// Шаг ручного увеличения (кнопка +)
+window.SPAWN_RATE_MANUAL_STEP = 0.003;
 
 // --- Эффект появления башни (impact_towers.png) ---
 // Спрайт содержит 7 кадров, общий размер 980x50 => кадр 140x50
@@ -193,6 +199,10 @@ window.TOWER_FIRE_RATE = 45;                 // интервал между вы
 window.TOWER_SHOTS_LEFT = 50;                // количество выстрелов до исчезновения башни
 window.TOWER_SHOT_SOUND_EVERY_N = 3;         // играть звук каждого N-го выстрела
 window.TOWER_DRAW_SIZE = 52;                 // размер отрисовки башни (52x52)
+// Фолбэк-стиль если нет спрайта башни
+window.TOWER_FALLBACK_FILL = 'rgba(0, 150, 255, 0.7)';
+window.TOWER_FALLBACK_STROKE = '#000000';
+window.TOWER_FALLBACK_LINE_WIDTH = 2;
 // Настройки текстов обычной башни (за лайки/аватар): киллкаунт и выстрелы
 window.TOWER_KC_FONT = 'bold 16px Arial';
 window.TOWER_KC_FILL = '#ffffff';
@@ -216,6 +226,11 @@ window.AUTO_TOWER_RANGE_FROM_GRID = true;    // авто-расчёт радиу
 window.TOWER_RANGE_MARGIN = 10;              // запас (в пикселях) поверх рассчитанного минимума
 
 // Настройки текстов башни-аватар (AvatarTower)
+// Визуальные параметры аватар-башни
+window.AVATAR_DRAW_SIZE = 52;                // размер отрисовки аватарки (квадрат)
+window.AVATAR_RADIUS = 15;                   // радиус круга маски
+window.AVATAR_BORDER_WIDTH = 6;              // толщина обводки
+window.AVATAR_BORDER_COLOR = '#222222';      // цвет обводки
 window.AVATAR_KC_FONT = 'bold 15px Arial';
 window.AVATAR_KC_FILL = '#ffffff';
 window.AVATAR_KC_STROKE = '#000000';

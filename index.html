@@ -15,12 +15,14 @@
 </head>
 <body>
   <canvas id="gameCanvas"></canvas>
+  <!-- Controls temporarily disabled to keep only the game canvas
   <div style="width:640px;margin:10px auto 0 auto;display:flex;justify-content:center;align-items:center;gap:16px;">
     <button id="startRunBtn" style="font-size:18px; padding:6px 12px;">Start</button>
     <button id="spawnPlus" style="font-size:24px;">+</button>
     <span id="spawnRateDisplay" style="font-size:18px;color:white;font-family:sans-serif;text-shadow:0 0 2px #000;">0.01</span>
   </div>
   <span id="spawnRateCorner" style="position:fixed;top:8px;left:8px;font-size:13px;color:#fff;background:rgba(0,0,0,0.5);padding:2px 7px;border-radius:7px;font-family:sans-serif;z-index:10;pointer-events:none;">rate: 0.01</span>
+  -->
 
   <audio id="spawnTowerSound" src="sound/spawnTower.mp3" preload="auto"></audio>
   <audio id="basicTowerShotSound" src="sound/laserShot_basicTower.mp3" preload="auto"></audio>
@@ -30,6 +32,7 @@
   <script src="leaderboard.js"></script>
   <!-- Modular JS -->
   <script src="js/config.js"></script>
+  <script src="js/live_config.js"></script>
   <script src="js/assets.js"></script>
   <script src="js/state.js"></script>
   <script src="js/utils.js"></script>
