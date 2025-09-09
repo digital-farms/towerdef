@@ -109,5 +109,14 @@
   if (spawnPlusBtn) spawnPlusBtn.onclick = () => { const step=(window.SPAWN_RATE_MANUAL_STEP||0.003), cap=(window.SPAWN_RATE_CAP||1); window.enemySpawnRate = Math.min(window.enemySpawnRate + step, cap); window.updateSpawnRateDisplay(); };
   window.updateSpawnRateDisplay();
 
-  window.bgImage.onload = async () => { try { if (window.loadLiveConfigPromise) await window.loadLiveConfigPromise; } catch {} window.gameLoop(); };
+  const startAfterConfig = async () => {
+    try { if (window.loadLiveConfigPromise) await window.loadLiveConfigPromise; } catch {}
+    window.gameLoop();
+  };
+  if (window.bgImage && window.bgImage.complete) {
+    // Изображение уже закешировано и загружено — стартуем сразу
+    startAfterConfig();
+  } else {
+    window.bgImage.onload = startAfterConfig;
+  }
 })();
