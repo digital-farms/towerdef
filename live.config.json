@@ -1,9 +1,7 @@
 {
   "STREAM_HOST": "100.70.128.72",
-  "STREAMERS": [
-    "klvin_asmr"
-  ],
+  "STREAMERS": [],
   "STREAMER_MODE": "fixed",
   "LIKES_MODE": "delta",
-  "GRID_SPAWN_ENABLED": false
+  "GRID_SPAWN_ENABLED": true
 }
