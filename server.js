@@ -222,18 +222,36 @@ function connectExternalWS(streamerName) {
         const likesVal = Number(likesValRaw) || 0;
         const avatarUrl = evt.payload && evt.payload.avatar ? String(evt.payload.avatar) : null;
 
-        const prevForViewer = likeCounts[viewer] || 0;
+        const prev = likeCounts[viewer] || 0;
+        let deltaForRestart = 0;
+        let newStored = prev;
+
         if (LIKES_MODE === 'cumulative') {
-          // Значение — суммарные лайки пользователя
-          likeCounts[viewer] = Math.max(prevForViewer, likesVal);
+          // cumulative: общий счётчик у источника, считаем дельту как разницу
+          if (likesVal >= prev) {
+            deltaForRestart = likesVal - prev;
+            newStored = likesVal;
+          } else {
+            // счётчик у источника «обнулилcя» — считаем пришедшее значение как новую дельту
+            deltaForRestart = likesVal;
+            newStored = likesVal;
+          }
         } else {
-          // Значение — приращение (по умолчанию)
-          likeCounts[viewer] = prevForViewer + likesVal;
+          // delta: по идее приходит приращение; но некоторые источники присылают cumulative
+          if (likesVal >= prev && likesVal <= prev + 100000) {
+            // Похоже на cumulative — считаем дельту как разницу
+            deltaForRestart = likesVal - prev;
+            newStored = likesVal;
+          } else {
+            // Нормальный delta-пакет
+            deltaForRestart = Math.max(0, likesVal);
+            newStored = prev + deltaForRestart;
+          }
         }
 
+        likeCounts[viewer] = newStored;
         const totalLikes = likeCounts[viewer];
-        // Дельта для перезапуска: если cumulative — берём приращение к нашему last seen; если delta — берём как есть
-        const deltaForRestart = (LIKES_MODE === 'cumulative') ? Math.max(0, (likesVal - prevForViewer)) : Math.max(0, likesVal);
+
         if (deltaForRestart > 0) {
           const deltaMsg = JSON.stringify({ type: 'likesDelta', delta: deltaForRestart, user: viewer });
           wss.clients.forEach((client) => { if (client.readyState === WebSocket.OPEN) client.send(deltaMsg); });

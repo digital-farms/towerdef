@@ -1,7 +1,9 @@
 {
   "STREAM_HOST": "100.70.128.72",
-  "STREAMERS": [],
+  "STREAMERS": [
+    "digital.n0mad"
+  ],
   "STREAMER_MODE": "fixed",
   "LIKES_MODE": "delta",
-  "GRID_SPAWN_ENABLED": true
+  "GRID_SPAWN_ENABLED": false
 }

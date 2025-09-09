@@ -12,6 +12,10 @@
 
   window.softResetToWaiting = function(){
     window.enemies.length = 0; window.bullets.length = 0; window.towers.length = 0; window.enemySpawnRate = (window.ENEMY_SPAWN_RATE_INITIAL || 0.004); window.updateSpawnRateDisplay();
+    // Запускаем обратный отсчёт, если включён режим ожидания по таймеру
+    if (window.RESTART_COUNTDOWN_MS && window.RESTART_COUNTDOWN_MS > 0){
+      window.restartCountdownEndsAt = Date.now() + Number(window.RESTART_COUNTDOWN_MS);
+    }
   };
 
   window.startGameRun = function(){
@@ -82,8 +86,18 @@
     }
 
     ctx.restore();
-    if (window.gameState === 'running' && window.base.hp <= 0){ if (window.USE_LIKES_RESTART){ window.gameState='waitingRestart'; window.softResetToWaiting(); if (typeof window.updateUIButtons==='function') window.updateUIButtons(); } else { window.softResetToWaiting(); window.startGameRun(); } }
-    if (window.gameState === 'waitingRestart' && window.USE_LIKES_RESTART && window.SHOW_RESTART_OVERLAY){ window.drawGameOverOverlay(); }
+    // Переход в режим ожидания после проигрыша
+    if (window.gameState === 'running' && window.base.hp <= 0){
+      window.gameState = 'waitingRestart';
+      window.softResetToWaiting();
+      if (typeof window.updateUIButtons==='function') window.updateUIButtons();
+    }
+    // Рисуем оверлей ожидания (таймер + лайки)
+    if (window.gameState === 'waitingRestart' && window.SHOW_RESTART_OVERLAY){ window.drawGameOverOverlay(); }
+    // Авто-старт после завершения обратного отсчёта
+    if (window.gameState === 'waitingRestart' && window.restartCountdownEndsAt && Date.now() >= window.restartCountdownEndsAt){
+      window.startGameRun();
+    }
     requestAnimationFrame(window.gameLoop);
   };
 
@@ -111,6 +125,10 @@
 
   const startAfterConfig = async () => {
     try { if (window.loadLiveConfigPromise) await window.loadLiveConfigPromise; } catch {}
+    // Если игра стартует в режиме ожидания — убедимся, что таймер инициализирован
+    if (window.gameState === 'waitingRestart' && (!window.restartCountdownEndsAt) && window.RESTART_COUNTDOWN_MS && window.RESTART_COUNTDOWN_MS > 0){
+      window.restartCountdownEndsAt = Date.now() + Number(window.RESTART_COUNTDOWN_MS);
+    }
     window.gameLoop();
   };
   if (window.bgImage && window.bgImage.complete) {

@@ -42,14 +42,19 @@ window.resizeCanvas = function() {
 window.resizeCanvas();
 
 window.drawGameOverOverlay = function() {
-  const ctx = window.ctx; const canvas = window.canvas; const RESTART_LIKES_TARGET = window.RESTART_LIKES_TARGET; const restartLikesAccum = window.restartLikesAccum;
+  const ctx = window.ctx; const canvas = window.canvas;
+  const endsAt = window.restartCountdownEndsAt || 0; const now = Date.now();
+  const msLeft = Math.max(0, endsAt - now);
+  const secLeft = Math.ceil(msLeft / 1000);
   ctx.save(); ctx.setTransform(1,0,0,1,0,0); ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(0,0,canvas.width,canvas.height);
   ctx.font='bold 64px Arial'; ctx.lineWidth=10; ctx.strokeStyle='black'; ctx.fillStyle='#ff4444'; ctx.textAlign='center';
-  ctx.strokeText('GAME OVER', canvas.width/2, canvas.height/2 - 20); ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 20);
-  const remaining = Math.max(0, RESTART_LIKES_TARGET - restartLikesAccum);
-  ctx.font='bold 36px Arial'; const text = `${remaining}\u2764\ufe0f before RESTART!`; ctx.lineWidth=6; ctx.strokeStyle='black'; ctx.fillStyle='#ffffff';
-  ctx.strokeText(text, canvas.width/2, canvas.height/2 + 40); ctx.fillText(text, canvas.width/2, canvas.height/2 + 40);
-  const barW = Math.min(600, canvas.width*0.8), barH=20, barX=(canvas.width-barW)/2, barY=canvas.height/2+70, p=Math.min(1, restartLikesAccum/RESTART_LIKES_TARGET);
-  ctx.fillStyle='rgba(255,255,255,0.2)'; ctx.fillRect(barX, barY, barW, barH); ctx.fillStyle='#ff2e88'; ctx.fillRect(barX, barY, barW*p, barH); ctx.strokeStyle='#000'; ctx.lineWidth=2; ctx.strokeRect(barX, barY, barW, barH);
+  ctx.strokeText('WAITING', canvas.width/2, canvas.height/2 - 20); ctx.fillText('WAITING', canvas.width/2, canvas.height/2 - 20);
+  // Countdown one-line text
+  ctx.lineWidth=6; ctx.strokeStyle='black'; ctx.fillStyle='#ffffff';
+  ctx.font='bold 42px Arial';
+  const label = 'Next run in';
+  const oneLine = `${label} ${secLeft}s`;
+  ctx.strokeText(oneLine, canvas.width/2, canvas.height/2 + 30);
+  ctx.fillText(oneLine, canvas.width/2, canvas.height/2 + 30);
   ctx.restore();
 };
