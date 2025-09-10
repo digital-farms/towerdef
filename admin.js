@@ -120,11 +120,12 @@
     toast('Если клиенты подписаны на configUpdated — они применят настройки автоматически');
   }
 
-  $('#save').onclick = saveConfig;
-  $('#saveRaw').onclick = saveRaw;
-  $('#format').onclick = formatRaw;
-  $('#restart').onclick = restart;
-  $('#reload').onclick = applyNoRestart;
+  const saveBtn = $('#save'); if (saveBtn) saveBtn.onclick = saveConfig;
+  const saveRawBtn = $('#saveRaw'); if (saveRawBtn) saveRawBtn.onclick = saveRaw;
+  const formatBtn = $('#format'); if (formatBtn) formatBtn.onclick = formatRaw;
+  // Кнопка рестарта удалена из UI; оставляем защиту, если вернётся
+  const restartBtn = $('#restart'); if (restartBtn) restartBtn.onclick = restart;
+  const reloadBtn = $('#reload'); if (reloadBtn) reloadBtn.onclick = applyNoRestart;
 
   loadConfig();
 })();
