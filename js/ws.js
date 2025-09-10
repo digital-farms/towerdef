@@ -1,6 +1,9 @@
 // ws.js
 (function(){
-  const tiktokSocket = new WebSocket('ws://127.0.0.1:8080');
+  // Подключаемся к WS того же домена/порта, откуда загружена страница
+  const wsProto = (location.protocol === 'https:') ? 'wss' : 'ws';
+  const wsUrl = `${wsProto}://${location.host}`; // пример: ws://kkclazh.com.ua:8080
+  const tiktokSocket = new WebSocket(wsUrl);
   tiktokSocket.addEventListener('open', () => { console.log('[TikTok WS] Соединение установлено'); });
   tiktokSocket.addEventListener('error', (err) => { console.log('[TikTok WS] Ошибка соединения', err); });
   let origTikTokMsgHandler = tiktokSocket.onmessage;
