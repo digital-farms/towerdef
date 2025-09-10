@@ -1,9 +1,9 @@
 {
   "STREAM_HOST": "100.70.128.72",
   "STREAMERS": [
-    "digital.n0mad"
+    "kaerukun_asmr"
   ],
   "STREAMER_MODE": "fixed",
   "LIKES_MODE": "delta",
-  "GRID_SPAWN_ENABLED": false
+  "GRID_SPAWN_ENABLED": true
 }

@@ -1,6 +1,6 @@
 // ws.js
 (function(){
-  const tiktokSocket = new WebSocket('ws://localhost:8080');
+  const tiktokSocket = new WebSocket('ws://127.0.0.1:8080');
   tiktokSocket.addEventListener('open', () => { console.log('[TikTok WS] Соединение установлено'); });
   tiktokSocket.addEventListener('error', (err) => { console.log('[TikTok WS] Ошибка соединения', err); });
   let origTikTokMsgHandler = tiktokSocket.onmessage;

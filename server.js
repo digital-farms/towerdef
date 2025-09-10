@@ -28,13 +28,13 @@ function writeLiveConfig(cfg){ fs.writeFileSync(LIVE_CONFIG_PATH, JSON.stringify
 const liveCfg = readLiveConfig();
 let secrets = {}; try { secrets = require('./server.config.js'); } catch {}
 
-const STREAM_HOST = process.env.TT_SERVER_HOST || liveCfg.STREAM_HOST || '100.70.128.72';
+const STREAM_HOST = process.env.TT_SERVER_HOST || liveCfg.STREAM_HOST || '127.0.0.1';
 const STREAMERS = (
   process.env.TT_STREAMERS || process.env.TT_STREAMER || (Array.isArray(liveCfg.STREAMERS) ? liveCfg.STREAMERS.join(',') : (liveCfg.STREAMERS || 'j.chatae'))
 ).toString().split(',').map(s=>s.trim()).filter(Boolean);
 const STREAMER_MODE = (process.env.TT_STREAMER_MODE || liveCfg.STREAMER_MODE || (STREAMERS.length > 1 ? 'random' : 'fixed')).toLowerCase();
 function pickStreamer(){
-  if (!STREAMERS.length) return 'girl_asmrrrr';
+  if (!STREAMERS.length) return 'halintonasmr';
   if (STREAMER_MODE === 'random') return STREAMERS[Math.floor(Math.random() * STREAMERS.length)];
   return STREAMERS[0];
 }
@@ -309,7 +309,7 @@ wss.on('connection', (ws) => {
 });
 
 server.listen(8080, async () => {
-  console.log('WebSocket server running on http://localhost:8080');
+  console.log('WebSocket server running on http://127.0.0.1:8080');
   if (!TOKEN) {
     logSrc('ВНИМАНИЕ: TT_TOKEN не задан — авторизация на внешнем сервере может не пройти.');
   }
