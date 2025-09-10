@@ -1,7 +1,7 @@
 {
-  "STREAM_HOST": "100.70.128.72",
+  "STREAM_HOST": "127.0.0.1",
   "STREAMERS": [
-    "kaerukun_asmr"
+    "lamarfaustino3"
   ],
   "STREAMER_MODE": "fixed",
   "LIKES_MODE": "delta",
