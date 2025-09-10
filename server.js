@@ -34,7 +34,7 @@ const STREAMERS = (
 ).toString().split(',').map(s=>s.trim()).filter(Boolean);
 const STREAMER_MODE = (process.env.TT_STREAMER_MODE || liveCfg.STREAMER_MODE || (STREAMERS.length > 1 ? 'random' : 'fixed')).toLowerCase();
 function pickStreamer(){
-  if (!STREAMERS.length) return 'halintonasmr';
+  if (!STREAMERS.length) return 'lamarfaustino3';
   if (STREAMER_MODE === 'random') return STREAMERS[Math.floor(Math.random() * STREAMERS.length)];
   return STREAMERS[0];
 }
