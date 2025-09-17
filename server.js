@@ -59,6 +59,9 @@ app.get('/admin', (req, res) => {
 app.get('/greeting', (req, res) => {
   res.sendFile(path.join(__dirname, 'greeting.html'));
 });
+app.get('/greeting.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'greeting.html'));
+});
 
 // GET current live (public) config
 app.get('/admin/live-config', (req, res) => {
