@@ -55,6 +55,11 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'admin.html'));
 });
 
+// Страница приветствий
+app.get('/greeting', (req, res) => {
+  res.sendFile(path.join(__dirname, 'greeting.html'));
+});
+
 // GET current live (public) config
 app.get('/admin/live-config', (req, res) => {
   const cfg = readLiveConfig();
@@ -215,6 +220,15 @@ function connectExternalWS(streamerName) {
           logSrc(`Выдана gift-башня L2 для ${viewer} (gift_price=${giftPrice})`);
         }
       }
+      // Ожидаемый формат: { unique_id: 'streamer', event_type: 'JOIN', payload: { user: 'viewer', avatar: 'url' } }
+      if (evt && evt.event_type === 'JOIN' && evt.payload && evt.payload.user) {
+        const viewer = String(evt.payload.user);
+        const avatarUrl = evt.payload && evt.payload.avatar ? String(evt.payload.avatar) : null;
+        const out = JSON.stringify({ type: 'viewer_join', user: viewer, avatar: avatarUrl });
+        wss.clients.forEach((client) => { if (client.readyState === WebSocket.OPEN) client.send(out); });
+        logSrc(`JOIN ${viewer} (avatar=${avatarUrl ? 'yes' : 'no'})`);
+      }
+
       // Ожидаемый формат: { unique_id: 'streamer', event_type: 'LIKE', payload: { user: 'viewer', likes: 7 } }
       if (evt && evt.event_type === 'LIKE' && evt.payload && evt.payload.user) {
         const viewer = String(evt.payload.user);

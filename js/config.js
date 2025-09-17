@@ -34,6 +34,61 @@ window.SPAWN_RATE_DEC_ON_TOWER_DEATH = 0.0015;
 // Шаг ручного увеличения (кнопка +)
 window.SPAWN_RATE_MANUAL_STEP = 0.003;
 
+// --- Приветствие зрителей (страница greeting.html) ---
+window.GREETING_ENABLED = true;                 // включить показ приветствий
+window.GREETING_SPRITE_URL = 'gift_towers_assets/helloMonster_ava.png';
+// Позиция спрайта (левый верх) и масштаб (1 = оригинал), в пикселях канваса
+window.GREETING_SPRITE_X = 7;                 // подгоните визуально
+window.GREETING_SPRITE_Y = 49;                 // подгоните визуально
+window.GREETING_SPRITE_SCALE = 0.3;             // масштаб спрайта
+
+// Эллипс выреза под аватар (после применения масштаба спрайта), координаты центра и радиусы
+// Эти значения нужно подогнать визуально под конкретный спрайт
+window.GREETING_AVATAR_CX = 210;                // центр X
+window.GREETING_AVATAR_CY = 210;                // центр Y
+window.GREETING_AVATAR_RX = 50;                 // радиус X (для круга = R)
+window.GREETING_AVATAR_RY = 50;                 // радиус Y
+
+// Порядок отрисовки: если true — аватар поверх спрайта (например, если нужно перекрывать края выреза)
+// если false — аватар под спрайтом (классическая маска «дырки»)
+window.GREETING_AVATAR_ON_TOP = true;
+
+// Текст приветствия
+window.GREETING_TEXT = 'Hello {name}!';
+window.GREETING_TEXT_X = 270;                   // позиция текста относительно канваса
+window.GREETING_TEXT_Y = 330;
+window.GREETING_TEXT_FONT = 'bold 70px Arial';
+window.GREETING_TEXT_FILL = '#ffffff';
+window.GREETING_TEXT_STROKE = '#000000';
+window.GREETING_TEXT_STROKE_WIDTH = 10;
+window.GREETING_TEXT_ALIGN = 'left';
+window.GREETING_TEXT_MAX_WIDTH = 700;           // ограничение ширины
+
+// Отдельные цвета для ника пользователя (если не заданы — берутся из общего текста)
+window.GREETING_NAME_FILL = '#ffd54f';          // цвет ника (пример: жёлтый)
+window.GREETING_NAME_STROKE = '#000000';        // обводка ника
+window.GREETING_NAME_STROKE_WIDTH = null;       // если null — использовать GREETING_TEXT_STROKE_WIDTH
+
+// Обводка (кольцо) вокруг аватарки — рисуется поверх всех слоёв
+window.GREETING_AVATAR_RING_ENABLED = true;
+window.GREETING_AVATAR_RING_COLOR = '#000000';
+window.GREETING_AVATAR_RING_WIDTH = 6;          // толщина линии (px)
+window.GREETING_AVATAR_RING_SHADOW_COLOR = 'rgba(0,0,0,0.5)';
+window.GREETING_AVATAR_RING_SHADOW_BLUR = 0;    // 0 — без тени
+// Тонкая подгонка радиусов для обводки (чтобы совпадала с краями спрайта)
+window.GREETING_AVATAR_RING_RX_DELTA = 0;       // +/‑ к радиусу X
+window.GREETING_AVATAR_RING_RY_DELTA = 0;       // +/‑ к радиусу Y
+
+// Тайминги анимации (в сумме <= 3000 мс)
+window.GREETING_FADE_IN_MS = 500;
+window.GREETING_HOLD_MS = 1500;
+window.GREETING_FADE_OUT_MS = 1000;
+
+// Антиспам и очередь
+window.GREETING_MIN_INTERVAL_MS = 800;          // не чаще, чем раз в 0.8 сек
+window.GREETING_QUEUE_LIMIT = 20;               // максимум в очереди
+window.GREETING_FALLBACK_AVATAR_URL = null;     // например, 'gift_towers_assets/helloMonster_ava.png'
+
 // --- Эффект появления башни (impact_towers.png) ---
 // Спрайт содержит 7 кадров, общий размер 980x50 => кадр 140x50
 window.TOWER_IMPACT_ENABLED = true;         // включить анимацию вспышки при спавне башни
