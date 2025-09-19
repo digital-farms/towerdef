@@ -430,6 +430,131 @@
     }
   }
 
+  // --- Tank shell (снаряд танка) ---
+  class TankShell {
+    constructor(x, y, vx, vy){ this.x=x; this.y=y; this.vx=vx; this.vy=vy; this.speed=Number(window.TANK_SHELL_SPEED)||6; this.dead=false; }
+    update(){
+      const sp = this.speed;
+      this.x += this.vx * sp; this.y += this.vy * sp;
+      // столкновение с базой
+      const bx = window.base.x, by = window.base.y;
+      if (this.vy === 0) {
+        // Горизонтальный режим: считаем попадание при пересечении X базы (визуальная траектория остаётся горизонтальной)
+        const dir = Math.sign(this.vx) || 1;
+        if ((dir>0 && this.x >= bx) || (dir<0 && this.x <= bx)) {
+          window.base.hp = Math.max(0, window.base.hp - (Number(window.TANK_SHELL_DAMAGE)||50));
+          this.dead = true;
+        }
+      } else {
+        // Диагональный/любой другой
+        const dx = this.x - bx, dy = this.y - by; if (dx*dx + dy*dy < 20*20){ window.base.hp = Math.max(0, window.base.hp - (Number(window.TANK_SHELL_DAMAGE)||50)); this.dead = true; }
+      }
+      // выход за экран
+      if (this.x < -20 || this.y < -20 || this.x > 660 || this.y > 500) this.dead = true;
+    }
+    draw(){ ctx.save(); ctx.fillStyle = '#ffaa00'; const r=Number(window.TANK_SHELL_RADIUS)||5; ctx.beginPath(); ctx.arc(this.x, this.y, r, 0, Math.PI*2); ctx.fill(); ctx.restore(); }
+  }
+
+  // --- Tank enemy (едет прямо к базе, давит башни, периодически стреляет) ---
+  class TankEnemy {
+    constructor(){
+      const spawn = window.path && window.path[0] ? window.path[0] : {x:40,y:440};
+      this.x = spawn.x; this.y = spawn.y;
+      this.dead = false; this.dying = false; // для совместимости
+      // Параметры по умолчанию (вынесем в config позже)
+      this.hp = Number(window.TANK_HP)||20; // немного больше сильного моба
+      this.maxHp = this.hp;
+      this.speed = Number(window.TANK_SPEED)||1.2; // медленно
+      this.crushRadius = Number(window.TANK_CRUSH_RADIUS)||18; // давит башни в радиусе
+      this.stopEveryPx = Number(window.TANK_STOP_EVERY_PX)||160; // каждые N пикселей останавливается
+      this.stopTimer = 0; this.stopDuration = Number(window.TANK_STOP_DURATION_FRAMES)||40; // кадров остановки (~0.66с при 60fps)
+      this.distanceTraveled = 0; this.lastStopMark = 0;
+      this.shotFiredInStop = false;
+      // Направление к базе (режим из конфига)
+      const mode = (window.TANK_PATH_MODE || 'straight_to_base');
+      if (mode === 'horizontal'){
+        const dir = Math.sign(window.base.x - this.x) || 1;
+        this.vx = dir; this.vy = 0;
+        this.fixedY = this.y; // держим постоянный Y
+      } else {
+        const dx = window.base.x - this.x, dy = window.base.y - this.y; const d = Math.hypot(dx, dy) || 1; this.vx = dx/d; this.vy = dy/d;
+        this.fixedY = null;
+      }
+      // Анимация
+      this.mode = 'run'; // 'run' | 'shot'
+      this.runFrame = 0; this.runCounter = 0; this.runDelay = Number(window.TANK_RUN_FRAME_DELAY)||12; // 2 кадра
+      this.shotFrame = 0; this.shotCounter = 0; this.shotDelay = Number(window.TANK_SHOT_FRAME_DELAY)||10; // 4 кадра
+      // Спрайтные размеры (если спрайт не прогружен — дефолт)
+      this.runFw = (window.tankRunSprite && window.tankRunSprite.width) ? (window.tankRunSprite.width/2) : 200;
+      this.runFh = (window.tankRunSprite && window.tankRunSprite.height) ? (window.tankRunSprite.height) : 100;
+      this.shotFw = (window.tankShotSprite && window.tankShotSprite.width) ? (window.tankShotSprite.width/4) : 200;
+      this.shotFh = (window.tankShotSprite && window.tankShotSprite.height) ? (window.tankShotSprite.height) : 100;
+      this.scale = Number(window.TANK_SCALE)||1.0;
+      this.drawOffsetY = Number(window.TANK_DRAW_OFFSET_Y)||0;
+    }
+    startDying(){ if (this.dying) return; this.dying = true; this.dead = true; }
+    update(){
+      if (this.dead) return;
+      // разрушение башен на пути
+      for (const t of window.towers){ if (t.dead) continue; const dx=t.x-this.x, dy=t.y-this.y; if (dx*dx+dy*dy <= this.crushRadius*this.crushRadius){ t.dead = true; } }
+      // движение/остановка
+      if (this.stopTimer > 0){
+        this.stopTimer--;
+        // выстрел по базе один раз в начале остановки
+        if (!this.shotFiredInStop){ this.fireAtBase(); this.shotFiredInStop = true; this.mode = 'shot'; this.shotFrame = 0; this.shotCounter = 0; }
+      } else {
+        const sp = this.speed; const px = this.vx*sp, py = this.vy*sp; this.x += px; if (this.fixedY!=null) { this.y = this.fixedY; } else { this.y += py; }
+        this.distanceTraveled += Math.hypot(px,py);
+        if (this.distanceTraveled - this.lastStopMark >= this.stopEveryPx){ this.stopTimer = this.stopDuration; this.shotFiredInStop = false; this.lastStopMark = this.distanceTraveled; }
+      }
+      // достижение базы
+      if ((window.TANK_PATH_MODE||'straight_to_base') === 'horizontal'){
+        const dir = Math.sign(this.vx)||1;
+        if ((dir>0 && this.x >= window.base.x) || (dir<0 && this.x <= window.base.x)){
+          window.base.hp = Math.max(0, window.base.hp - (Number(window.TANK_CONTACT_DAMAGE)||50)); this.dead = true; return;
+        }
+      } else {
+        const bdx = window.base.x - this.x, bdy = window.base.y - this.y; if (bdx*bdx + bdy*bdy < 18*18){ window.base.hp = Math.max(0, window.base.hp - (Number(window.TANK_CONTACT_DAMAGE)||50)); this.dead = true; return; }
+      }
+      // анимация
+      if (this.mode === 'run' && this.stopTimer===0){ this.runCounter++; if (this.runCounter>=this.runDelay){ this.runCounter=0; this.runFrame=(this.runFrame+1)%2; }}
+      if (this.mode === 'shot'){ this.shotCounter++; if (this.shotCounter>=this.shotDelay){ this.shotCounter=0; this.shotFrame++; if (this.shotFrame>=4){ this.mode='run'; this.runCounter=0; } } }
+    }
+    fireAtBase(){
+      // Определяем точку дула на текущем спрайте
+      const scale = this.scale;
+      const muzzleX = Number(window.TANK_MUZZLE_X)||0;
+      const muzzleY = Number(window.TANK_MUZZLE_Y)||0;
+      const fw = (this.mode==='shot') ? this.shotFw : this.runFw;
+      const fh = (this.mode==='shot') ? this.shotFh : this.runFh;
+      const dw = fw * scale;
+      const dh = fh * scale;
+      const worldX = this.x - dw/2 + muzzleX * scale;
+      const worldY = this.y - dh + this.drawOffsetY + muzzleY * scale;
+
+      if ((window.TANK_PATH_MODE||'straight_to_base') === 'horizontal'){
+        const dir = Math.sign(window.base.x - this.x) || 1; const vx = dir, vy = 0;
+        window.bullets.push(new TankShell(worldX, worldY, vx, vy));
+      } else {
+        const dx=window.base.x-worldX, dy=window.base.y-worldY; const d=Math.hypot(dx,dy)||1; const vx=dx/d, vy=dy/d; window.bullets.push(new TankShell(worldX, worldY, vx, vy));
+      }
+    }
+    draw(){
+      // HP bar
+      const scale = this.scale; const barY = this.y - this.runFh*scale - 8 + this.drawOffsetY;
+      ctx.save(); ctx.fillStyle='#222'; ctx.fillRect(this.x-25, barY, 50, 6); ctx.fillStyle='#ff4d4d'; ctx.fillRect(this.x-25, barY, 50*(this.hp/this.maxHp), 6); ctx.strokeStyle='#000'; ctx.strokeRect(this.x-25, barY, 50, 6); ctx.restore();
+      // sprite
+      if (this.mode==='run' && window.tankRunSprite && window.tankRunSprite.complete){
+        const sx=this.runFrame*this.runFw, sy=0, dw=this.runFw*scale, dh=this.runFh*scale; ctx.drawImage(window.tankRunSprite, sx, sy, this.runFw, this.runFh, this.x-dw/2, this.y-dh + this.drawOffsetY, dw, dh);
+      } else if (this.mode==='shot' && window.tankShotSprite && window.tankShotSprite.complete){
+        const frame=Math.min(this.shotFrame,3); const sx=frame*this.shotFw, sy=0, dw=this.shotFw*scale, dh=this.shotFh*scale; ctx.drawImage(window.tankShotSprite, sx, sy, this.shotFw, this.shotFh, this.x-dw/2, this.y-dh + this.drawOffsetY, dw, dh);
+      } else {
+        // фоллбек
+        ctx.save(); ctx.fillStyle='rgba(80,80,80,0.9)'; ctx.fillRect(this.x-40, this.y-20, 80, 40); ctx.restore();
+      }
+    }
+  }
+
   // Export to window
   window.Enemy = Enemy;
   window.TowerSpawnImpact = TowerSpawnImpact;
@@ -441,4 +566,6 @@
   window.GolemEnemy = GolemEnemy;
   window.BossBullet = BossBullet;
   window.BossEnemy = BossEnemy;
+  window.TankEnemy = TankEnemy;
+  window.TankShell = TankShell;
 })();

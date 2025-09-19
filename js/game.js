@@ -3,10 +3,31 @@
   const canvas = window.canvas; const ctx = window.ctx;
   // Коллекция визуальных эффектов (например, вспышка при появлении башни)
   window.effects = window.effects || [];
+  // Маленький оверлей с rate в углу (создаём динамически)
+  function ensureSpawnRateCorner(){
+    let el = document.getElementById('spawnRateCorner');
+    if (!el){
+      el = document.createElement('span');
+      el.id = 'spawnRateCorner';
+      el.style.position = 'fixed';
+      el.style.top = '8px';
+      el.style.left = '8px';
+      el.style.fontSize = '13px';
+      el.style.color = '#fff';
+      el.style.background = 'rgba(0,0,0,0.5)';
+      el.style.padding = '2px 7px';
+      el.style.borderRadius = '7px';
+      el.style.fontFamily = 'sans-serif';
+      el.style.zIndex = '10';
+      el.style.pointerEvents = 'none';
+      document.body.appendChild(el);
+    }
+    return el;
+  }
   window.updateSpawnRateDisplay = function(){
     const a = document.getElementById('spawnRateDisplay');
     if (a) a.textContent = window.enemySpawnRate.toFixed(3);
-    const b = document.getElementById('spawnRateCorner');
+    const b = ensureSpawnRateCorner();
     if (b) b.textContent = `rate: ${window.enemySpawnRate.toFixed(3)}`;
   };
 
@@ -19,7 +40,8 @@
   };
 
   window.startGameRun = function(){
-    window.base.hp = 100; window.restartLikesAccum = 0; window.gameState = 'running'; if (typeof window.updateUIButtons === 'function') window.updateUIButtons();
+    const startHp = (typeof window.BASE_HP_START==='number') ? window.BASE_HP_START : 100;
+    window.base.hp = startHp; window.restartLikesAccum = 0; window.gameState = 'running'; if (typeof window.updateUIButtons === 'function') window.updateUIButtons();
   };
 
   window.addRestartLikes = function(delta){
@@ -68,14 +90,16 @@
     backTowers.sort((a,b)=>a.gy - b.gy);
     frontTowers.sort((a,b)=>a.gy - b.gy);
     for (const {t} of backTowers) t.draw();
-    // 1) Сначала обычные мобы (без големов и боссов)
-    for (const e of window.enemies) if (!(e instanceof window.GolemEnemy) && !(e instanceof window.BossEnemy)) e.draw();
+    // 1) Сначала обычные мобы (без големов, боссов и танков)
+    for (const e of window.enemies) if (!(e instanceof window.GolemEnemy) && !(e instanceof window.BossEnemy) && !(e instanceof window.TankEnemy)) e.draw();
     // 2) Затем големы
     for (const e of window.enemies) if (e instanceof window.GolemEnemy) e.draw();
     // 3) Башни, находящиеся перед дорогой
     for (const {t} of frontTowers) t.draw();
-    // 4) Боссы поверх всего остального
+    // 4) Боссы поверх всего остального (кроме танков)
     for (const e of window.enemies) if (e instanceof window.BossEnemy) e.draw();
+    // 5) Танки — поверх всех других мобов
+    for (const e of window.enemies) if (e instanceof window.TankEnemy) e.draw();
     for (const b of window.bullets) b.draw();
 
     if (window.gameState === 'running'){
@@ -134,7 +158,8 @@
   if (window.bgImage && window.bgImage.complete) {
     // Изображение уже закешировано и загружено — стартуем сразу
     startAfterConfig();
+    if (typeof window.updateSpawnRateDisplay === 'function') window.updateSpawnRateDisplay();
   } else {
-    window.bgImage.onload = startAfterConfig;
+    window.bgImage.onload = () => { startAfterConfig(); if (typeof window.updateSpawnRateDisplay === 'function') window.updateSpawnRateDisplay(); };
   }
 })();

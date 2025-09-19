@@ -4,9 +4,17 @@
   const wsProto = (location.protocol === 'https:') ? 'wss' : 'ws';
   const wsUrl = `${wsProto}://${location.host}`; // пример: ws://kkclazh.com.ua:8080
   const tiktokSocket = new WebSocket(wsUrl);
-  tiktokSocket.addEventListener('open', () => { console.log('[TikTok WS] Соединение установлено'); });
+  tiktokSocket.addEventListener('open', () => {
+    console.log('[TikTok WS] Соединение установлено');
+    // Представимся серверу как игровой клиент
+    try {
+      tiktokSocket.send(JSON.stringify({ type: 'clientHello', role: 'game', path: location.pathname, ua: navigator.userAgent }));
+    } catch {}
+  });
   tiktokSocket.addEventListener('error', (err) => { console.log('[TikTok WS] Ошибка соединения', err); });
   let origTikTokMsgHandler = tiktokSocket.onmessage;
+  let lastTankSpawnAt = 0; // антидубли на случай повторной доставки одного и того же подарка
+  let lastGiftTowerAt = 0; // антидубли для newGiftTower
   tiktokSocket.onmessage = function(event) {
     try {
       const data = JSON.parse(event.data);
@@ -22,6 +30,10 @@
         }
       } else if (data.type === 'newGiftTower') {
         if (window.gameState !== 'running') return;
+        const now = Date.now();
+        const cdTower = 4000;
+        if (now - lastGiftTowerAt < cdTower) { console.warn('[GiftTower] duplicate suppressed (client)'); return; }
+        lastGiftTowerAt = now;
         const pos = window.randomTowerPositionInAllowedZones(); const lvl = Number(data.level || 1);
         if (data.avatar) {
           const img = new Image(); img.crossOrigin = 'anonymous'; img.src = data.avatar;
@@ -30,6 +42,15 @@
         } else {
           const t=new window.GiftAvatarTower(pos.x, pos.y, null, data.nickname, data.userId, lvl); window.towers.push(t); window.playSpawnTowerSound(); if(window.TOWER_IMPACT_ENABLED&&window.TowerSpawnImpact){ const gy=window.getTowerGroundY(t); window.effects.push(new window.TowerSpawnImpact(t.x, gy)); } window.enemySpawnRate = Math.min(window.enemySpawnRate + (window.SPAWN_RATE_INC_PER_TOWER||0.0015), window.SPAWN_RATE_CAP||1); window.updateSpawnRateDisplay();
         }
+      } else if (data.type === 'newGiftTank') {
+        if (window.gameState !== 'running') return;
+        if (window.TANK_ENABLED === false) return;
+        const now = Date.now();
+        const cd = 4000; // мс; игнорируем повтор в течение 4с
+        if (now - lastTankSpawnAt < cd) { console.warn('[Tank] duplicate event suppressed (client)'); return; }
+        lastTankSpawnAt = now;
+        console.log('[Tank] spawn');
+        window.enemies.push(new window.TankEnemy());
       } else if (data.type === 'extLog') {
         if (data.level === 'raw') {
           console.log('[EXT][RAW]', data.message);

@@ -6,7 +6,8 @@ window.ctx = canvas.getContext('2d');
 window.towers = [];
 window.enemies = [];
 window.bullets = [];
-window.base = { x: 540, y: 80, hp: 10000 };
+// База: используем значения из конфига
+window.base = { x: 540, y: 80, hp: (typeof window.BASE_HP_MAX==='number' ? window.BASE_HP_MAX : 1000) };
 
 // Spawning and scaling
 window.enemySpawnRate = 0.004; // ниже стартовая частота спавна

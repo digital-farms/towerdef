@@ -43,3 +43,10 @@ window.giftL2Img.src = 'gift_towers_assets/2lvl_gift_tower.png';
 // Эффект появления башни: вспышка у основания (7 кадров, общий размер 980x50)
 window.impactTowersSprite = new Image();
 window.impactTowersSprite.src = './impact_towers.png';
+
+// Tank enemy sprites
+window.tankRunSprite = new Image();
+window.tankRunSprite.src = './Asset_Tank_Run.png';
+
+window.tankShotSprite = new Image();
+window.tankShotSprite.src = './Asset_Tank_Shot.png';

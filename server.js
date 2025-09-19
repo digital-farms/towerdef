@@ -13,7 +13,23 @@ const wss = new WebSocket.Server({ server });
 
 const likeCounts = {};
 const sentTowersCount = {};
+const lastTankGiftAt = Object.create(null); // дедупликация танков по пользователю
+const lastGiftTowerAt = Object.create(null); // дедупликация gift-башен по пользователю
 let leaderboardData = [];
+
+// Helper: отправка только игровым клиентам
+function sendToGames(jsonString){
+  let cnt=0;
+  wss.clients.forEach((client) => {
+    try{
+      if (client.readyState === WebSocket.OPEN && client.role === 'game'){
+        client.send(jsonString);
+        cnt++;
+      }
+    } catch {}
+  });
+  logSrc(`sendToGames -> sent to ${cnt} game client(s)`);
+}
 
 // --- ADMIN: config storage (public, non-secret) ---
 const LIVE_CONFIG_PATH = path.join(__dirname, 'live.config.json');
@@ -190,12 +206,31 @@ function connectExternalWS(streamerName) {
           });
         } catch {}
       }
-      // Обработка подарков: gift_price === 1 -> L1, gift_price >= 10 -> L2
+      // Обработка подарков: gift_price === 1 -> L1, gift_price === 5 -> Tank, gift_price >= 10 -> L2
+      // Дедупликация по сигнатуре события (на случай двукратной доставки)
+      const payload = evt && evt.payload ? evt.payload : null;
+      const recvTs = Date.now();
+      if (!global.__recentGiftSignatures) global.__recentGiftSignatures = new Map();
+      const recents = global.__recentGiftSignatures;
+      // Сигнатура строится максимально устойчиво к отсутствующим полям
+      const sig = payload ? [
+        'gift',
+        String(payload.user||''),
+        String(payload.gift_price||''),
+        String(payload.gift_id||payload.id||payload.event_id||payload.timestamp||evt.timestamp||evt.time||'')
+      ].join('|') : null;
+      // Очистка устаревших записей
+      for (const [k, t] of recents) if (recvTs - t > 8000) recents.delete(k);
       if (evt && evt.event_type === 'GIFT' && evt.payload && evt.payload.user) {
+        if (sig && recents.has(sig)) { logSrc(`🟡 DUP gift suppressed sig=${sig}`); return; }
         const viewer = String(evt.payload.user);
         const giftPrice = Number(evt.payload.gift_price || 0);
         const avatarUrl = evt.payload && evt.payload.avatar ? String(evt.payload.avatar) : null;
+        if (sig) recents.set(sig, recvTs);
         if (giftPrice === 1) {
+          const now = Date.now();
+          if (now - (lastGiftTowerAt[viewer] || 0) < 3000) { logSrc(`Дубликат gift L1 подавлен для ${viewer}`); return; }
+          lastGiftTowerAt[viewer] = now;
           const giftMsg = JSON.stringify({
             type: 'newGiftTower',
             userId: viewer,
@@ -204,11 +239,23 @@ function connectExternalWS(streamerName) {
             level: 1,
             time: new Date().toISOString()
           });
-          wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) client.send(giftMsg);
-          });
+          sendToGames(giftMsg);
           logSrc(`Выдана gift-башня L1 для ${viewer}`);
+        } else if (giftPrice === 5) {
+          const now = Date.now();
+          const prev = lastTankGiftAt[viewer] || 0;
+          if (now - prev < 3000) {
+            logSrc(`Дубликат танка подавлен для ${viewer}`);
+          } else {
+            lastTankGiftAt[viewer] = now;
+            const tankMsg = JSON.stringify({ type: 'newGiftTank', userId: viewer, nickname: viewer, avatar: avatarUrl, time: new Date().toISOString() });
+            sendToGames(tankMsg);
+            logSrc(`Спавн танка для ${viewer} (gift_price=5)`);
+          }
         } else if (giftPrice >= 10) {
+          const now2 = Date.now();
+          if (now2 - (lastGiftTowerAt[viewer] || 0) < 3000) { logSrc(`Дубликат gift L2 подавлен для ${viewer}`); return; }
+          lastGiftTowerAt[viewer] = now2;
           const giftMsgL2 = JSON.stringify({
             type: 'newGiftTower',
             userId: viewer,
@@ -217,9 +264,7 @@ function connectExternalWS(streamerName) {
             level: 2,
             time: new Date().toISOString()
           });
-          wss.clients.forEach((client) => {
-            if (client.readyState === WebSocket.OPEN) client.send(giftMsgL2);
-          });
+          sendToGames(giftMsgL2);
           logSrc(`Выдана gift-башня L2 для ${viewer} (gift_price=${giftPrice})`);
         }
       }
@@ -271,7 +316,7 @@ function connectExternalWS(streamerName) {
 
         if (deltaForRestart > 0) {
           const deltaMsg = JSON.stringify({ type: 'likesDelta', delta: deltaForRestart, user: viewer });
-          wss.clients.forEach((client) => { if (client.readyState === WebSocket.OPEN) client.send(deltaMsg); });
+          sendToGames(deltaMsg);
         }
 
         logSrc(`${viewer} likes total=${totalLikes} (delta=${deltaForRestart})`);
@@ -280,8 +325,8 @@ function connectExternalWS(streamerName) {
         const prevCount = sentTowersCount[viewer] || 0;
         let newCount = 0;
         if (totalLikes >= 5) {
-          // первая башня за 5 лайков, затем каждые +100 лайков — ещё по одной башне
-          newCount = 1 + Math.floor((totalLikes - 5) / 100);
+          // первая башня за 5 лайков, затем каждые +30 лайков — ещё по одной башне
+          newCount = 1 + Math.floor((totalLikes - 5) / 30);
         }
         if (newCount > prevCount) {
           for (let i = prevCount; i < newCount; i++) {
@@ -294,11 +339,7 @@ function connectExternalWS(streamerName) {
               bonus: i > 0
             };
             const msg = JSON.stringify({ type: 'newTower', ...payload });
-            wss.clients.forEach((client) => {
-              if (client.readyState === WebSocket.OPEN) {
-                client.send(msg);
-              }
-            });
+            sendToGames(msg);
             logSrc(`Выдана башня #${i + 1} для ${viewer}`);
             sentTowersCount[viewer] = i + 1;
           }
@@ -312,14 +353,34 @@ function connectExternalWS(streamerName) {
 
 // Логирование всех подключений
 wss.on('connection', (ws) => {
+  ws.role = 'unknown';
+  ws.clientPath = '';
+  ws.clientIp = (ws._socket && ws._socket.remoteAddress) ? ws._socket.remoteAddress : 'unknown';
   console.log('[WS] Новый клиент подключен');
 
-  // --- WS для получения leaderboard от клиента ---
+  // --- WS приём сообщений от клиента ---
   ws.on('message', (msg) => {
     try {
       const data = JSON.parse(msg);
+      if (data.type === 'clientHello'){
+        ws.role = String(data.role || 'unknown');
+        ws.clientPath = String(data.path || '');
+        console.log(`[WS] clientHello role=${ws.role} path=${ws.clientPath} ip=${ws.clientIp}`);
+        // Разрешаем только одного игрового клиента: закрываем все предыдущие game‑клиенты
+        if (ws.role === 'game'){
+          let closed = 0;
+          wss.clients.forEach((other) => {
+            if (other !== ws && other.readyState === WebSocket.OPEN && other.role === 'game'){
+              try { other.close(4000, 'Another game client connected'); closed++; } catch {}
+            }
+          });
+          if (closed>0) console.log(`[WS] Closed ${closed} previous game client(s)`);
+        }
+        return;
+      }
       if (data.type === 'leaderboardUpdate' && Array.isArray(data.entries)) {
         leaderboardData = data.entries;
+        return;
       }
     } catch (e) {}
   });
